@@ -1,15 +1,16 @@
 ---
 title: "Part 1"
-author: "YOUR NAME"
+author: "Jane Huber"
 output: 
   html_document:
     code_folding: hide
     df_print: paged
     theme: sandstone
+    toc: true
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = FALSE, warning = FALSE)
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, error = FALSE)
 library(tidyverse)
 library(lubridate)
 
@@ -37,4 +38,20 @@ dplyr::tbl(con, 'sales') %>% count(year(sale_date))
 
 ```
 
+Section A: Conduct an exploratory data analysis of homes in Detroit. Offer an overview of relevant trends in the data and data quality issues. Contextualize your analysis with key literature on properties in Detroit.
+https://scholarship.law.uci.edu/ucilr/vol9/iss4/3/
+https://harris.uchicago.edu/files/evalrespropertytaxasdetroit20162018.pdf
+
+
+Section B: Use cmfproperty to conduct a sales ratio study across the relevant time period. Note that cmfproperty is designed to produce Rmarkdown reports but use the documentation and insert relevant graphs/figures into your report. Look to make this reproducible since you’ll need these methods to analyze your assessment model later on. Detroit has many sales which are not arm’s length (sold at fair market value) so some sales should be excluded, but which ones?
+https://erhla.github.io/cmfproperty/articles/cmfproperty.html
+
+
+
+
+
+Section C: Explore trends and relationships with property sales using simple regressions
+
+
+Section D: Explore trends and relationships with foreclosures using simple regressions
 
