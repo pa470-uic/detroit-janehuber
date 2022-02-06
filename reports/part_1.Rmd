@@ -13,12 +13,14 @@ output:
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, error = FALSE)
 library(tidyverse)
 library(lubridate)
-
+#devtools::install_github("cmf-uchicago/cmfproperty")
+library(cmfproperty)
+library(purrr)
 ```
 
 Template file. Code will be included in folded blocks in the output to facilitate grading. Please knit this file and commit both the rmd and the html output. If you add external files to your analysis, please commit them to the files folder in this repository. NOTE: please do not commit large (15MB+) files to GitHub. Instead please denote the origin of the files in your code. 
 
-```{r, include=FALSE}
+```{r download-data, include=FALSE}
 
 con <- DBI::dbConnect(RSQLite::SQLite(), "../database/detroit.sqlite")
 
@@ -38,23 +40,97 @@ sales_per_year <- dplyr::tbl(con, 'sales') %>% count(year(sale_date))
 
 ```
 
-Section A: Conduct an exploratory data analysis of homes in Detroit. Offer an overview of relevant trends in the data and data quality issues. Contextualize your analysis with key literature on properties in Detroit.
+# Section A: Exploratory Data Analysis
+
+
+Conduct an exploratory data analysis of homes in Detroit. Offer an overview of relevant trends in the data and data quality issues. Contextualize your analysis with key literature on properties in Detroit.
 https://scholarship.law.uci.edu/ucilr/vol9/iss4/3/
 https://harris.uchicago.edu/files/evalrespropertytaxasdetroit20162018.pdf
 
+- What are tools to use for exploratory data analysis? [Chapter 6 of the textbook]
+
+- Step 1: Look into the data, figure out what's going on for each.
+Note: Honestly not great descctiptions of what different statuses mean. Difficulty in interpreting how I can use these; I'll have to do some poking around in order to make determinations.
+
+- Step 2: clean data so it can be used for analysis later on.
+```{r data-exploration-cleaning, include = FALSE}
+
+sales_clean <- 
+  sales %>% 
+  select(c(parcel_num, sale_date, sale_price, sale_terms)) %>% 
+  mutate(sale_date = as.Date(sale_date),
+         sale_terms = str_replace_all(sale_terms, "Not Arms Length", "NOT ARMS LENGTH"),
+         sale_terms = str_replace_all(sale_terms, "not arms Length", "NOT ARMS LENGTH"),
+         sale_terms = str_replace_all(sale_terms, "valid arms length", "VALID ARMS LENGTH"),
+         sale_terms = str_replace_all(sale_terms, "Valid Arms Length", "VALID ARMS LENGTH"),
+         sale_terms = str_replace_all(sale_terms, "bank sale used", "BANK SALE USED"),
+         sale_terms = str_replace_all(sale_terms, "00-NOT AUDITED", "NOT AUDITED"),
+         sale_terms = as_factor(sale_terms))
+
+assessments_clean <- 
+  assessments %>% 
+  select(-c(propclass )) %>% 
+  rename(c(parcel_num = PARCELNO,
+           assessed_value = ASSESSEDVALUE,
+           taxable_value = TAXABLEVALUE))
+
+blight_clean <- 
+  blight %>% 
+  mutate(violation_date = as.Date(violation_date)) %>% 
+  rename(parcel_num = parcelno)
+
+#Create a parcels tibble that combines historic with all. Can filter down later if needed.
+
+parcels_current_clean <- 
+  parcels %>% 
+  rename(parcel_num = parcel_number)
+
+parcels_clean
+
+```
+
+
+- Visually look at the data, make charts of the distribution of values
 
 
 ```{r exploratory-analysis}
+sales
 
 
 ```
 
-Section B: Use cmfproperty to conduct a sales ratio study across the relevant time period. Note that cmfproperty is designed to produce Rmarkdown reports but use the documentation and insert relevant graphs/figures into your report. Look to make this reproducible since you’ll need these methods to analyze your assessment model later on. Detroit has many sales which are not arm’s length (sold at fair market value) so some sales should be excluded, but which ones?
+# Section B: Sales Ratio Study
+
+Use cmfproperty to conduct a sales ratio study across the relevant time period. Note that cmfproperty is designed to produce Rmarkdown reports but use the documentation and insert relevant graphs/figures into your report. Look to make this reproducible since you’ll need these methods to analyze your assessment model later on. Detroit has many sales which are not arm’s length (sold at fair market value) so some sales should be excluded, but which ones?
 https://erhla.github.io/cmfproperty/articles/cmfproperty.html
+
+Things I want to write:
+- What sort of data processing am I doing? What am I removing?
+- Lean heavily on the strategy of the CCAO to exclude, then do that. Include
+- a link.
+
+Remove data:
+- Drop certain sales because of sale_terms; should look at what they mean
+- Drop certain sales if they are X (5?) number of standard deviations from the assessment, just like how the CCAO did it. In order to do this, I want to first standardize all of them... There are some goofy different ways of framing this.
+
+
 
 
 ```{r cmfproperty-sales-ratio}
+#head(cmfproperty::example_data)
 
+# NOTE: Let's 
+
+# formatted_data_ratio <- 
+  
+
+# ratios <-
+#   cmfproperty::reformat_data(
+#     data = sales,
+#     sale_col = "SALE_PRICE",
+#     assessment_col = "ASSESSED_VALUE",
+#     sale_year_col = "SALE_YEAR",
+#   )
 
 ```
 
