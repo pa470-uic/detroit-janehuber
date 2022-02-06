@@ -22,12 +22,13 @@ Template file. Code will be included in folded blocks in the output to facilitat
 
 con <- DBI::dbConnect(RSQLite::SQLite(), "../database/detroit.sqlite")
 
-# sales tbl
-
-dplyr::tbl(con, 'sales')
-
 # convert to tibble
 sales <- dplyr::tbl(con, 'sales') %>% dplyr::collect()
+assessments <- dplyr::tbl(con, 'assessments') %>% dplyr::collect()
+blight <- dplyr::tbl(con, 'blight') %>% dplyr::collect()
+parcels <- dplyr::tbl(con, 'parcels') %>% dplyr::collect()
+parcels_historic <- dplyr::tbl(con, 'parcels_historic') %>% dplyr::collect()
+foreclosures <- dplyr::tbl(con, 'foreclosures') %>% dplyr::collect()
 
 # sql query
 
@@ -42,15 +43,31 @@ https://scholarship.law.uci.edu/ucilr/vol9/iss4/3/
 https://harris.uchicago.edu/files/evalrespropertytaxasdetroit20162018.pdf
 
 
+
+```{r exploratory-analysis}
+
+
+```
+
 Section B: Use cmfproperty to conduct a sales ratio study across the relevant time period. Note that cmfproperty is designed to produce Rmarkdown reports but use the documentation and insert relevant graphs/figures into your report. Look to make this reproducible since you’ll need these methods to analyze your assessment model later on. Detroit has many sales which are not arm’s length (sold at fair market value) so some sales should be excluded, but which ones?
 https://erhla.github.io/cmfproperty/articles/cmfproperty.html
 
 
+```{r cmfproperty-sales-ratio}
 
+
+```
 
 
 Section C: Explore trends and relationships with property sales using simple regressions
+```{r}
 
+
+```
 
 Section D: Explore trends and relationships with foreclosures using simple regressions
 
+```{r}
+
+
+```
