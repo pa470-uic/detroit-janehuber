@@ -16,6 +16,11 @@ library(lubridate)
 #devtools::install_github("cmf-uchicago/cmfproperty")
 library(cmfproperty)
 library(purrr)
+library(gridExtra)
+library(ggplot2)
+
+pacman::p_load(ggridges)
+
 ```
 
 Template file. Code will be included in folded blocks in the output to facilitate grading. Please knit this file and commit both the rmd and the html output. If you add external files to your analysis, please commit them to the files folder in this repository. NOTE: please do not commit large (15MB+) files to GitHub. Instead please denote the origin of the files in your code. 
@@ -34,7 +39,7 @@ foreclosures <- dplyr::tbl(con, 'foreclosures') %>% dplyr::collect()
 
 # sql query
 
-sales_per_year <- dplyr::tbl(con, 'sales') %>% count(year(sale_date))
+#sales_per_year <- dplyr::tbl(con, 'sales') %>% count(year(sale_date))
 
 #dplyr::tbl(con, 'sales') %>% count(year(sale_date)) %>% show_query()
 
@@ -55,6 +60,7 @@ Note: Honestly not great descctiptions of what different statuses mean. Difficul
 - Step 2: clean data so it can be used for analysis later on.
 ```{r data-exploration-cleaning, include = FALSE}
 
+# Sales
 sales_clean <- 
   sales %>% 
   select(c(parcel_num, sale_date, sale_price, sale_terms)) %>% 
@@ -67,35 +73,124 @@ sales_clean <-
          sale_terms = str_replace_all(sale_terms, "00-NOT AUDITED", "NOT AUDITED"),
          sale_terms = as_factor(sale_terms))
 
+# Assessments
 assessments_clean <- 
   assessments %>% 
   select(-c(propclass )) %>% 
   rename(c(parcel_num = PARCELNO,
            assessed_value = ASSESSEDVALUE,
-           taxable_value = TAXABLEVALUE))
+           taxable_value = TAXABLEVALUE)) %>% 
+  mutate(year = as.factor(year))
+
+# Blight
 
 blight_clean <- 
   blight %>% 
   mutate(violation_date = as.Date(violation_date)) %>% 
   rename(parcel_num = parcelno)
 
-#Create a parcels tibble that combines historic with all. Can filter down later if needed.
+# Parcels: Create a parcels tibble that combines historic with all. Can filter down later if needed.
 
 parcels_current_clean <- 
   parcels %>% 
-  rename(parcel_num = parcel_number)
+  rename(parcel_num = parcel_number) %>% 
+  mutate(zip_code = as.numeric(zip_code),
+         property_class = as.factor(property_class))
 
-parcels_clean
+parcels_historic_clean <- 
+  parcels_historic %>% 
+  rename(parcel_num = PARCELNO,
+         address = PROPADDR,
+         zip_code = ZIPCODE,
+         taxpayer_1 = TAXPAYER1,
+         taxpayer_street = TAXPADDR,
+         taxpayer_city = TAXPCITY,
+         taxpayer_state = TAXPSTATE,
+         taxpayer_zip = TAXPZIP,
+         property_class = propclass,
+         tax_status = TAXSTATUS,
+         total_square_footage = TOTALSQFT,
+         total_acreage = TOTALACREAGE,
+         frontage = FRONTAGE,
+         homestead_pre = PRE,
+         sale_price = SALEPRICE,
+         sale_date = SALEDATE,
+         assessed_value = ASSESSEDVALUE,
+         taxable_value = TAXABLEVALUE) %>% 
+  mutate(zip_code = as.numeric(zip_code),
+         property_class = as.factor(property_class))
+
+parcels_clean <- 
+  left_join(parcels_current_clean, parcels_historic_clean)
+
+# Foreclosures (do I need to do some sort of filtering?)
+
+foreclosures_clean <- 
+  foreclosures %>% 
+  rename(parcel_num = prop_parcelnum)
 
 ```
 
 
-- Visually look at the data, make charts of the distribution of values
+- Visually look at the data, make charts of the distribution of values.
+Use the recommendation of the textbook for how to lay this out!
+
+Do I want number of foreclosures by year?
 
 
 ```{r exploratory-analysis}
-sales
 
+custom_theme <- theme_bw() +
+  theme(plot.title = element_text(size = 9),
+        axis.title.x = element_text(size = 9), 
+        axis.title.y = element_text(size = 9))
+
+# Get distribution of assessment value by year
+
+
+assessments_histogram <- 
+  assessments_clean %>% 
+  ggplot() +
+  geom_density(mapping = aes(assessed_value), 
+               colour = FALSE, fill = "blue") + 
+  ggtitle("Distribution of assessments") + custom_theme
+
+assessments_2011_2016 <- 
+  assessments_clean %>% 
+  filter(year %in% c(2011, 2012, 2013, 2014, 2015, 2016),
+         assessed_value < (sd(assessed_value) * 2)) %>% 
+  ggplot() +
+  stat_density_ridges(aes(x = assessed_value, y = year),
+                      fill = "blue", 
+                      colour = "white", 
+                      scale = 1, 
+                      alpha = 0.9,
+                      quantile_lines = TRUE, 
+                      quantiles = 2) +
+  xlab("Assessment Value") + 
+  ylab("Year") + 
+  ggtitle("Distribution of Assessements: 2011-2016") +
+  custom_theme
+
+assessments_2017_2022 <- 
+assessments_clean %>% 
+  filter(year %in% c(2017, 2018, 2019, 2020, 2021, 2022),
+         assessed_value < (sd(assessed_value) * 2)) %>% 
+  ggplot() +
+  geom_density_ridges(aes(x = assessed_value, y = year),
+                      fill = "blue", 
+                      colour = "white", 
+                      scale = 1, 
+                      alpha = 0.9) +
+  xlab("Assessment Value") + 
+  ylab("Year") + 
+    ggtitle("Distribution of Assessements: 2017-2022") +
+  custom_theme
+
+grid.arrange(assessments_2011_2016, assessments_2017_2022, ncol = 2)
+
+# Get distribution of price value by year
+# Get 
 
 ```
 
