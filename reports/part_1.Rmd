@@ -19,8 +19,6 @@ library(purrr)
 library(gridExtra)
 library(ggplot2)
 
-pacman::p_load(ggridges)
-
 ```
 
 Template file. Code will be included in folded blocks in the output to facilitate grading. Please knit this file and commit both the rmd and the html output. If you add external files to your analysis, please commit them to the files folder in this repository. NOTE: please do not commit large (15MB+) files to GitHub. Instead please denote the origin of the files in your code. 
@@ -151,13 +149,7 @@ custom_theme <- theme_bw() +
 
 # Get distribution of assessment value by year
 
-
-assessments_histogram <- 
-  assessments_clean %>% 
-  ggplot() +
-  geom_density(mapping = aes(assessed_value), 
-               colour = FALSE, fill = "blue") + 
-  ggtitle("Distribution of assessments") + custom_theme
+pacman::p_load(ggridges)
 
 assessments_2011_2016 <- 
   assessments_clean %>% 
