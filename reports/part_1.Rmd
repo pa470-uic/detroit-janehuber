@@ -56,7 +56,7 @@ Note: Honestly not great descriptions of what different statuses mean. Difficult
 sales_clean <- 
   sales %>% 
   select(c(parcel_num, sale_date, sale_price, sale_terms)) %>% 
-  mutate(sale_date = as.numeric(format(as.Date(sale_date), format="%Y")),
+  mutate(sale_date = as.Date(sale_date),
          sale_terms = str_replace_all(sale_terms, "Not Arms Length", "NOT ARMS LENGTH"),
          sale_terms = str_replace_all(sale_terms, "not arms length", "NOT ARMS LENGTH"),
          sale_terms = str_replace_all(sale_terms, "valid arms length", "VALID ARMS LENGTH"),
@@ -64,7 +64,7 @@ sales_clean <-
          sale_terms = str_replace_all(sale_terms, "bank sale used", "BANK SALE USED"),
          sale_terms = str_replace_all(sale_terms, "00-NOT AUDITED", "NOT AUDITED"),
          sale_terms = as_factor(sale_terms)) %>% 
-  filter(sale_terms == "VALID ARMS LENGTH")
+  filter(sale_terms == "VALID ARMS LENGTH") 
 
 # Assessments
 assessments_clean <-
@@ -74,6 +74,11 @@ assessments_clean <-
            assessed_value = ASSESSEDVALUE,
            taxable_value = TAXABLEVALUE,
            assessment_year = year))
+
+assessments_clean_wider <-
+  assessments_clean %>% 
+  pivot_wider(names_from = assessment_year,
+              values_from = assessed_value)
 
 # Blight
 
@@ -119,10 +124,19 @@ parcels_clean <-
 
 # Foreclosures (Filter out old data)
 
+years_for_evaluation <- c('2011', '2012', '2013', '2014', '2015', '2016', '2017', '2018', '2019')
+
 foreclosures_clean <- 
   foreclosures %>% 
   rename(parcel_num = prop_parcelnum) %>% 
-  filter(c(parcel_num, 2011, 2012, 2013, 2014, 2015, 2016, 2017, 2018, 2019))
+  pivot_longer(cols = years_for_evaluation,
+               names_to = "year_foreclosed",
+               values_to = "status",
+               values_drop_na = TRUE
+               ) %>% 
+  filter(year_foreclosed >= 2011,
+         year_foreclosed <= 2019) %>% 
+  select(c(parcel_num, year_foreclosed))
 
 sales_and_assessments <- 
   left_join(sales_clean, assessments_clean) %>% 
@@ -130,19 +144,20 @@ sales_and_assessments <-
          sale_date > 2011,
          assessment_year > 2011)
 
+sales_assessments_foreclosures <- 
+  left_join(sales_and_assessments, foreclosures_clean)
+
 ```
 
-The UC Irvine Law Review's "Taxed Out: Illegal Property Tax Assessments and the Epidemic of Tax Foreclosures in Detroit" explores the relationship between over-assessing a home and the ultimate foreclosure of that home. Let's first explore overall assessment values--how do they look over time?--and then see if we can discern any patterns visually in the data between over-assessment and an ultimate foreclosure.
+The UC Irvine Law Review's ["Taxed Out: Illegal Property Tax Assessments and the Epidemic of Tax Foreclosures in Detroit"](https://scholarship.law.uci.edu/ucilr/vol9/iss4/3/) explores the relationship between over-assessing a home and the ultimate foreclosure of that home. Let's first explore overall assessment values--how do they look over time?--and then see if we can discern any patterns visually in the data between over-assessment and an ultimate foreclosure.
 
-
-Limited by data until 2019.
-
-```{r exploratory-analysis, warning = FALSE, message = FALSE}
+```{r exploratory-analysis-assessments}
 
 custom_theme <- theme_bw() +
   theme(plot.title = element_text(size = 9),
         axis.title.x = element_text(size = 9), 
         axis.title.y = element_text(size = 9))
+
 
 # Get distribution of assessment value by year
 
@@ -150,10 +165,12 @@ pacman::p_load(ggridges)
 
 assessments_2011_2016 <- 
   assessments_clean %>% 
-  filter(year %in% c(2011, 2012, 2013, 2014, 2015, 2016),
-         assessed_value < (sd(assessed_value) * 2)) %>% 
+  filter(assessment_year %in% c(2011, 2012, 2013, 2014, 2015, 2016),
+         assessed_value < (sd(assessed_value) * 2),
+         assessed_value > 0) %>% 
+  mutate(assessment_year = as.factor(assessment_year)) %>% 
   ggplot() +
-  stat_density_ridges(aes(x = assessed_value, y = year),
+  stat_density_ridges(aes(x = assessed_value, y = assessment_year),
                       fill = "blue", 
                       colour = "white", 
                       scale = 1, 
@@ -167,10 +184,12 @@ assessments_2011_2016 <-
 
 assessments_2017_2022 <- 
 assessments_clean %>% 
-  filter(year %in% c(2017, 2018, 2019, 2020, 2021, 2022),
-         assessed_value < (sd(assessed_value) * 2)) %>% 
+  filter(assessment_year %in% c(2017, 2018, 2019, 2020, 2021, 2022),
+         assessed_value < (sd(assessed_value) * 2),
+         assessed_value > 0) %>% 
+  mutate(assessment_year = as.factor(assessment_year)) %>% 
   ggplot() +
-  geom_density_ridges(aes(x = assessed_value, y = year),
+  geom_density_ridges(aes(x = assessed_value, y = assessment_year),
                       fill = "blue", 
                       colour = "white", 
                       scale = 1, 
@@ -184,10 +203,26 @@ assessments_clean %>%
 
 grid.arrange(assessments_2011_2016, assessments_2017_2022, ncol = 2)
 
-# Get distribution of price value by year
+```
 
+Here, we can see that the average assessment decreased over time. Now, let's look at sales over time alongside those assessments; are home values also going down?
+
+```{r exploratory-analysis-sales}
+
+
+# Ideal: can I have a dot of all sales from 2012-2020
+sales_trends_over_time <- 
+  sales_clean %>% 
+  filter(sale_price < (sd(sale_price) * 3)) %>% 
+  ggplot() +
+  geom_point(aes(x=sale_date, y = sale_price))
 
 ```
+
+
+Similarly, the Harris School of Public Policy at the University of Chicago's The Center For Municipal Finance produced the report ["An Evaluation of Residential Property Tax Assessments in the City of Detroit, 2016-2018"](https://harris.uchicago.edu/files/evalrespropertytaxasdetroit20162018.pdf) that looks at similar trends across home assessments in Detroit. 
+
+
 
 ### Section B: Sales Ratio Study
 
