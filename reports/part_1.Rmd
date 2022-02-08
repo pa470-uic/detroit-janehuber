@@ -69,21 +69,22 @@ sales_clean <-
 # Assessments
 assessments_clean <-
   assessments %>%
-  select(-c(propclass )) %>%
+  select(-c(propclass)) %>%
   rename(c(parcel_num = PARCELNO,
            assessed_value = ASSESSEDVALUE,
-           taxable_value = TAXABLEVALUE))%>%
-  mutate(year = as.factor(year))
+           taxable_value = TAXABLEVALUE,
+           assessment_year = year))
 
 # Blight
 
 blight_clean <- 
   blight %>% 
   mutate(violation_date = as.Date(violation_date)) %>% 
-  rename(parcel_num = parcelno)
+  rename(parcel_num = parcelno) %>% 
+  select(c(parcel_num, violation_date))
+
 
 # Parcels: Create a parcels tibble that combines historic with all. Can filter down later if needed.
-
 parcels_current_clean <- 
   parcels %>% 
   rename(parcel_num = parcel_number) %>% 
@@ -116,20 +117,25 @@ parcels_historic_clean <-
 parcels_clean <- 
   left_join(parcels_current_clean, parcels_historic_clean)
 
-# Foreclosures (do I need to do some sort of filtering?)
+# Foreclosures (Filter out old data)
 
 foreclosures_clean <- 
   foreclosures %>% 
-  rename(parcel_num = prop_parcelnum)
+  rename(parcel_num = prop_parcelnum) %>% 
+  filter(c(parcel_num, 2011, 2012, 2013, 2014, 2015, 2016, 2017, 2018, 2019))
 
 sales_and_assessments <- 
-  left_join(assessments_clean, sales_clean) %>% 
-  filter()
+  left_join(sales_clean, assessments_clean) %>% 
+  filter(!is.na(sale_date),
+         sale_date > 2011,
+         assessment_year > 2011)
 
 ```
 
 The UC Irvine Law Review's "Taxed Out: Illegal Property Tax Assessments and the Epidemic of Tax Foreclosures in Detroit" explores the relationship between over-assessing a home and the ultimate foreclosure of that home. Let's first explore overall assessment values--how do they look over time?--and then see if we can discern any patterns visually in the data between over-assessment and an ultimate foreclosure.
 
+
+Limited by data until 2019.
 
 ```{r exploratory-analysis, warning = FALSE, message = FALSE}
 
