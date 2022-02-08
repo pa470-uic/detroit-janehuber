@@ -24,7 +24,7 @@ library(ggplot2)
 
 ```{r download-data, include=FALSE}
 
-con <- DBI::dbConnect(RSQLite::SQLite(), "database/detroit.sqlite")
+con <- DBI::dbConnect(RSQLite::SQLite(), "../database/detroit.sqlite")
 
 # convert to tibble
 sales <- dplyr::tbl(con, 'sales') %>% dplyr::collect()
@@ -151,7 +151,7 @@ sales_assessments_foreclosures <-
 
 The UC Irvine Law Review's ["Taxed Out: Illegal Property Tax Assessments and the Epidemic of Tax Foreclosures in Detroit"](https://scholarship.law.uci.edu/ucilr/vol9/iss4/3/) explores the relationship between over-assessing a home and the ultimate foreclosure of that home. Let's first explore overall assessment values--how do they look over time?--and then see if we can discern any patterns visually in the data between over-assessment and an ultimate foreclosure.
 
-```{r exploratory-analysis-assessments}
+```{r exploratory-analysis-assessments, message=FALSE}
 
 custom_theme <- theme_bw() +
   theme(plot.title = element_text(size = 9),
@@ -207,7 +207,7 @@ grid.arrange(assessments_2011_2016, assessments_2017_2022, ncol = 2)
 
 Here, we can see that the average assessment decreased over time. Now, let's look at sales over time alongside those assessments; are home values also going down?
 
-```{r exploratory-analysis-sales}
+```{r exploratory-analysis-sales, message=FALSE}
 
 sales_trends_over_time <- 
   sales_clean %>% 
@@ -219,6 +219,14 @@ sales_trends_over_time <-
   ggtitle("Detroit Home Sales") +
   custom_theme
 
+sales_trends_over_time
+
+```
+
+
+The Harris School of Public Policy at the University of Chicago's The Center For Municipal Finance produced the report ["An Evaluation of Residential Property Tax Assessments in the City of Detroit, 2016-2018"](https://harris.uchicago.edu/files/evalrespropertytaxasdetroit20162018.pdf) emphasizes the reduction of the number of assessments higher than sales, but that it's still too high. Here, we can reproduce that finding with the data:
+
+```{r percentage-assessment-higher-sale, message = FALSE} 
 sales_and_assessments_data <- 
   sales_and_assessments %>% 
   select(-c(sale_terms, taxable_value)) %>% 
@@ -237,11 +245,9 @@ sales_and_assessment_difference_time <-
   ggtitle("Percentage of Assessments Higher Than Sales in Detroit") +
   custom_theme
 
+sales_and_assessment_difference_time
+
 ```
-
-
-The Harris School of Public Policy at the University of Chicago's The Center For Municipal Finance produced the report ["An Evaluation of Residential Property Tax Assessments in the City of Detroit, 2016-2018"](https://harris.uchicago.edu/files/evalrespropertytaxasdetroit20162018.pdf) emphasizes the impact of
-
 
 
 ### Section B: Sales Ratio Study
@@ -295,14 +301,14 @@ Remove data:
 ```
 
 
-## Section C: Explore trends and relationships with property sales using simple regressions
+### Section C: Explore trends and relationships with property sales using simple regressions
 
 ```{r property-sales-regressions}
 
 
 ```
 
-## Section D: Explore trends and relationships with foreclosures using simple regressions
+### Section D: Explore trends and relationships with foreclosures using simple regressions
 
 ```{r foreclosures-regressions}
 
