@@ -56,7 +56,7 @@ Note: Honestly not great descriptions of what different statuses mean. Difficult
 sales_clean <- 
   sales %>% 
   select(c(parcel_num, sale_date, sale_price, sale_terms)) %>% 
-  mutate(sale_date = as.Date(sale_date),
+  mutate(sale_date = as_factor(format(as.Date(sale_date), format="%Y")),
          sale_terms = str_replace_all(sale_terms, "Not Arms Length", "NOT ARMS LENGTH"),
          sale_terms = str_replace_all(sale_terms, "not arms length", "NOT ARMS LENGTH"),
          sale_terms = str_replace_all(sale_terms, "valid arms length", "VALID ARMS LENGTH"),
@@ -209,18 +209,38 @@ Here, we can see that the average assessment decreased over time. Now, let's loo
 
 ```{r exploratory-analysis-sales}
 
-
-# Ideal: can I have a dot of all sales from 2012-2020
 sales_trends_over_time <- 
   sales_clean %>% 
   filter(sale_price < (sd(sale_price) * 3)) %>% 
   ggplot() +
-  geom_point(aes(x=sale_date, y = sale_price))
+  geom_boxplot(aes(sale_date,sale_price)) +
+  xlab("Year") + 
+  ylab("Price") + 
+  ggtitle("Detroit Home Sales") +
+  custom_theme
+
+sales_and_assessments_data <- 
+  sales_and_assessments %>% 
+  select(-c(sale_terms, taxable_value)) %>% 
+  filter(!is.na(sale_price)) %>% 
+  mutate(assessment_sale_diff = (assessed_value - sale_price)) %>% 
+  select(c(sale_date, assessment_sale_diff)) %>% 
+  group_by(sale_date) %>% 
+  summarize(perc_assessment_higher = (sum(assessment_sale_diff >= 0)/n()))
+
+sales_and_assessment_difference_time <- 
+  sales_and_assessments_data %>% 
+  ggplot(aes(x = sale_date, y = perc_assessment_higher)) +
+  geom_line() +
+  xlab("Year") + 
+  ylab("Percent") + 
+  ggtitle("Percentage of Assessments Higher Than Sales in Detroit") +
+  custom_theme
 
 ```
 
 
-Similarly, the Harris School of Public Policy at the University of Chicago's The Center For Municipal Finance produced the report ["An Evaluation of Residential Property Tax Assessments in the City of Detroit, 2016-2018"](https://harris.uchicago.edu/files/evalrespropertytaxasdetroit20162018.pdf) that looks at similar trends across home assessments in Detroit. 
+The Harris School of Public Policy at the University of Chicago's The Center For Municipal Finance produced the report ["An Evaluation of Residential Property Tax Assessments in the City of Detroit, 2016-2018"](https://harris.uchicago.edu/files/evalrespropertytaxasdetroit20162018.pdf) emphasizes the impact of
 
 
 
