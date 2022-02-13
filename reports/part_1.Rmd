@@ -30,14 +30,9 @@ con <- DBI::dbConnect(RSQLite::SQLite(), "../database/detroit.sqlite")
 # convert to tibble
 sales <- dplyr::tbl(con, 'sales') %>% dplyr::collect()
 assessments <- dplyr::tbl(con, 'assessments') %>% dplyr::collect()
-#blight <- dplyr::tbl(con, 'blight') %>% dplyr::collect()
-#parcels <- dplyr::tbl(con, 'parcels') %>% dplyr::collect()
-#parcels_historic <- dplyr::tbl(con, 'parcels_historic') %>% dplyr::collect()
 foreclosures <- dplyr::tbl(con, 'foreclosures') %>% dplyr::collect()
 
 property_classifications <- read_xlsx("../files/OFFICE OF THE ASSESSORS_PROPERTY CLASSIFICATIONS -rev.xlsx")
-
-# file.exists("../files/OFFICE OF THE ASSESSORS_PROPERTY CLASSIFICATIONS -rev.xlsx")
 
 ```
 
@@ -48,12 +43,6 @@ Conduct an exploratory data analysis of homes in Detroit. Offer an overview of r
 https://scholarship.law.uci.edu/ucilr/vol9/iss4/3/
 https://harris.uchicago.edu/files/evalrespropertytaxasdetroit20162018.pdf
 
-- What are tools to use for exploratory data analysis? [Chapter 6 of the textbook]
-
-- Step 1: Look into the data, figure out what's going on for each.
-Note: Honestly not great descriptions of what different statuses mean. Difficulty in interpreting how I can use these; I'll have to do some poking around in order to make determinations.
-
-- Step 2: clean data so it can be used for analysis later on.
 
 ```{r data-exploration-cleaning, include = FALSE}
 
@@ -85,52 +74,6 @@ assessments_clean_wider <-
   assessments_clean %>% 
   pivot_wider(names_from = assessment_year,
               values_from = assessed_value)
-
-# Blight
-
-# blight_clean <- 
-#   blight %>% 
-#   mutate(violation_date = as.Date(violation_date)) %>% 
-#   rename(parcel_num = parcelno) %>% 
-#   select(c(parcel_num, violation_date))
-
-
-# Parcels: Create a parcels tibble that combines historic with all. Can filter down later if needed.
-# parcels_current_clean <- 
-#   parcels %>% 
-#   rename(parcel_num = parcel_number) %>% 
-#   mutate(zip_code = as.numeric(zip_code),
-#          property_class = as.factor(property_class))
-# 
-# parcels_historic_clean <- 
-#   parcels_historic %>% 
-#   rename(parcel_num = PARCELNO,
-#          address = PROPADDR,
-#          zip_code = ZIPCODE,
-#          taxpayer_1 = TAXPAYER1,
-#          taxpayer_street = TAXPADDR,
-#          taxpayer_city = TAXPCITY,
-#          taxpayer_state = TAXPSTATE,
-#          taxpayer_zip = TAXPZIP,
-#          property_class = propclass,
-#          tax_status = TAXSTATUS,
-#          total_square_footage = TOTALSQFT,
-#          total_acreage = TOTALACREAGE,
-#          frontage = FRONTAGE,
-#          homestead_pre = PRE,
-#          sale_price = SALEPRICE,
-#          sale_date = SALEDATE,
-#          assessed_value = ASSESSEDVALUE,
-#          taxable_value = TAXABLEVALUE) %>% 
-#   mutate(zip_code = as.numeric(zip_code),
-#          property_class = as.factor(property_class))
-# 
-# parcels_clean <- 
-#   left_join(parcels_current_clean, parcels_historic_clean)
-
-# Foreclosures (Filter out old data)
-
-# years_for_evaluation <- c('2011', '2012', '2013', '2014', '2015', '2016', '2017', '2018', '2019')
 
 years_for_evaluation <- c('2016', '2017', '2018', '2019')
 
