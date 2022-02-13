@@ -19,6 +19,7 @@ library(cmfproperty)
 library(purrr)
 library(gridExtra)
 library(ggplot2)
+library(readxl)
 
 ```
 
@@ -29,10 +30,14 @@ con <- DBI::dbConnect(RSQLite::SQLite(), "../database/detroit.sqlite")
 # convert to tibble
 sales <- dplyr::tbl(con, 'sales') %>% dplyr::collect()
 assessments <- dplyr::tbl(con, 'assessments') %>% dplyr::collect()
-blight <- dplyr::tbl(con, 'blight') %>% dplyr::collect()
-parcels <- dplyr::tbl(con, 'parcels') %>% dplyr::collect()
-parcels_historic <- dplyr::tbl(con, 'parcels_historic') %>% dplyr::collect()
+#blight <- dplyr::tbl(con, 'blight') %>% dplyr::collect()
+#parcels <- dplyr::tbl(con, 'parcels') %>% dplyr::collect()
+#parcels_historic <- dplyr::tbl(con, 'parcels_historic') %>% dplyr::collect()
 foreclosures <- dplyr::tbl(con, 'foreclosures') %>% dplyr::collect()
+
+property_classifications <- read_xlsx("../files/OFFICE OF THE ASSESSORS_PROPERTY CLASSIFICATIONS -rev.xlsx")
+
+# file.exists("../files/OFFICE OF THE ASSESSORS_PROPERTY CLASSIFICATIONS -rev.xlsx")
 
 ```
 
@@ -49,6 +54,7 @@ https://harris.uchicago.edu/files/evalrespropertytaxasdetroit20162018.pdf
 Note: Honestly not great descriptions of what different statuses mean. Difficulty in interpreting how I can use these; I'll have to do some poking around in order to make determinations.
 
 - Step 2: clean data so it can be used for analysis later on.
+
 ```{r data-exploration-cleaning, include = FALSE}
 
 # Sales
@@ -82,49 +88,52 @@ assessments_clean_wider <-
 
 # Blight
 
-blight_clean <- 
-  blight %>% 
-  mutate(violation_date = as.Date(violation_date)) %>% 
-  rename(parcel_num = parcelno) %>% 
-  select(c(parcel_num, violation_date))
+# blight_clean <- 
+#   blight %>% 
+#   mutate(violation_date = as.Date(violation_date)) %>% 
+#   rename(parcel_num = parcelno) %>% 
+#   select(c(parcel_num, violation_date))
 
 
 # Parcels: Create a parcels tibble that combines historic with all. Can filter down later if needed.
-parcels_current_clean <- 
-  parcels %>% 
-  rename(parcel_num = parcel_number) %>% 
-  mutate(zip_code = as.numeric(zip_code),
-         property_class = as.factor(property_class))
-
-parcels_historic_clean <- 
-  parcels_historic %>% 
-  rename(parcel_num = PARCELNO,
-         address = PROPADDR,
-         zip_code = ZIPCODE,
-         taxpayer_1 = TAXPAYER1,
-         taxpayer_street = TAXPADDR,
-         taxpayer_city = TAXPCITY,
-         taxpayer_state = TAXPSTATE,
-         taxpayer_zip = TAXPZIP,
-         property_class = propclass,
-         tax_status = TAXSTATUS,
-         total_square_footage = TOTALSQFT,
-         total_acreage = TOTALACREAGE,
-         frontage = FRONTAGE,
-         homestead_pre = PRE,
-         sale_price = SALEPRICE,
-         sale_date = SALEDATE,
-         assessed_value = ASSESSEDVALUE,
-         taxable_value = TAXABLEVALUE) %>% 
-  mutate(zip_code = as.numeric(zip_code),
-         property_class = as.factor(property_class))
-
-parcels_clean <- 
-  left_join(parcels_current_clean, parcels_historic_clean)
+# parcels_current_clean <- 
+#   parcels %>% 
+#   rename(parcel_num = parcel_number) %>% 
+#   mutate(zip_code = as.numeric(zip_code),
+#          property_class = as.factor(property_class))
+# 
+# parcels_historic_clean <- 
+#   parcels_historic %>% 
+#   rename(parcel_num = PARCELNO,
+#          address = PROPADDR,
+#          zip_code = ZIPCODE,
+#          taxpayer_1 = TAXPAYER1,
+#          taxpayer_street = TAXPADDR,
+#          taxpayer_city = TAXPCITY,
+#          taxpayer_state = TAXPSTATE,
+#          taxpayer_zip = TAXPZIP,
+#          property_class = propclass,
+#          tax_status = TAXSTATUS,
+#          total_square_footage = TOTALSQFT,
+#          total_acreage = TOTALACREAGE,
+#          frontage = FRONTAGE,
+#          homestead_pre = PRE,
+#          sale_price = SALEPRICE,
+#          sale_date = SALEDATE,
+#          assessed_value = ASSESSEDVALUE,
+#          taxable_value = TAXABLEVALUE) %>% 
+#   mutate(zip_code = as.numeric(zip_code),
+#          property_class = as.factor(property_class))
+# 
+# parcels_clean <- 
+#   left_join(parcels_current_clean, parcels_historic_clean)
 
 # Foreclosures (Filter out old data)
 
-years_for_evaluation <- c('2011', '2012', '2013', '2014', '2015', '2016', '2017', '2018', '2019')
+# years_for_evaluation <- c('2011', '2012', '2013', '2014', '2015', '2016', '2017', '2018', '2019')
+
+years_for_evaluation <- c('2016', '2017', '2018', '2019')
+
 
 foreclosures_clean <- 
   foreclosures %>% 
@@ -134,14 +143,14 @@ foreclosures_clean <-
                values_to = "status",
                values_drop_na = TRUE
                ) %>% 
-  filter(year_foreclosed >= 2011,
+  filter(year_foreclosed >= 2016,
          year_foreclosed <= 2019) %>% 
   select(c(parcel_num, year_foreclosed))
 
 sales_and_assessments <- 
   left_join(sales_clean, assessments_clean) %>% 
   filter(!is.na(sale_date),
-         sale_date > 2011,
+         sale_date > 2016,
          assessment_year > 2011)
 
 sales_assessments_foreclosures <- 
@@ -163,28 +172,28 @@ custom_theme <- theme_bw() +
 
 pacman::p_load(ggridges)
 
-assessments_2011_2016 <- 
-  assessments_clean %>% 
-  filter(assessment_year %in% c(2011, 2012, 2013, 2014, 2015, 2016),
-         assessed_value < (sd(assessed_value) * 2),
-         assessed_value > 0) %>% 
-  mutate(assessment_year = as.factor(assessment_year)) %>% 
-  ggplot() +
-  stat_density_ridges(aes(x = assessed_value, y = assessment_year),
-                      fill = "blue", 
-                      colour = "white", 
-                      scale = 1, 
-                      alpha = 0.6,
-                      quantile_lines = TRUE, 
-                      quantiles = 2) +
-  xlab("Assessment Value") + 
-  ylab("Year") + 
-  ggtitle("Distribution of Assessements: 2011-2016") +
-  custom_theme
+# assessments_2011_2016 <- 
+#   assessments_clean %>% 
+#   filter(assessment_year %in% c(2011, 2012, 2013, 2014, 2015, 2016),
+#          assessed_value < (sd(assessed_value) * 2),
+#          assessed_value > 0) %>% 
+#   mutate(assessment_year = as.factor(assessment_year)) %>% 
+#   ggplot() +
+#   stat_density_ridges(aes(x = assessed_value, y = assessment_year),
+#                       fill = "blue", 
+#                       colour = "white", 
+#                       scale = 1, 
+#                       alpha = 0.6,
+#                       quantile_lines = TRUE, 
+#                       quantiles = 2) +
+#   xlab("Assessment Value") + 
+#   ylab("Year") + 
+#   ggtitle("Distribution of Assessements: 2011-2016") +
+#   custom_theme
 
-assessments_2017_2022 <- 
+assessments_2016_2022 <- 
 assessments_clean %>% 
-  filter(assessment_year %in% c(2017, 2018, 2019, 2020, 2021, 2022),
+  filter(assessment_year %in% c(2016, 2017, 2018, 2019, 2020, 2021, 2022),
          assessed_value < (sd(assessed_value) * 2),
          assessed_value > 0) %>% 
   mutate(assessment_year = as.factor(assessment_year)) %>% 
@@ -201,7 +210,9 @@ assessments_clean %>%
     ggtitle("Distribution of Assessements: 2017-2022") +
   custom_theme
 
-grid.arrange(assessments_2011_2016, assessments_2017_2022, ncol = 2)
+assessments_2016_2022
+
+#grid.arrange(assessments_2011_2016, assessments_2017_2022, ncol = 2)
 
 ```
 
@@ -268,31 +279,32 @@ Remove data:
 
 
 ```{r cmfproperty-sales-ratio, warning = FALSE, message = FALSE}
-# 
-# ratios <-
-#   cmfproperty::reformat_data(
-#     data = sales_and_assessments,
-#     sale_col = "sale_price",
-#     assessment_col = "assessed_value",
-#     sale_year_col = "sale_date",
-#   )
-# 
-# head(as.data.frame(ratios))
-# 
-# 
-# 
-# stats <- cmfproperty::calc_iaao_stats(ratios)
-# head(stats)
-# 
-# output <- diagnostic_plots(stats, 
-#                            ratios, 
-#                            min_reporting_yr = 2015, 
-#                            max_reporting_yr = 2022)
-# 
-# output[[1]]
-# output[[2]]
-# output[[3]]
-# output[[4]]
+
+
+ratios <-
+  cmfproperty::reformat_data(
+    data = sales_and_assessments,
+    sale_col = "sale_price",
+    assessment_col = "assessed_value",
+    sale_year_col = "sale_date",
+  )
+
+head(as.data.frame(ratios))
+
+
+
+stats <- cmfproperty::calc_iaao_stats(ratios)
+head(stats)
+
+output <- diagnostic_plots(stats,
+                           ratios,
+                           min_reporting_yr = 2016,
+                           max_reporting_yr = 2019)
+
+output[[1]]
+output[[2]]
+output[[3]]
+output[[4]]
 
 # cmfproperty::make_report(ratios,
 #                          jurisdiction_name = "Detroit",
@@ -303,7 +315,19 @@ Remove data:
 
 ### Section C: Explore trends and relationships with property sales using simple regressions
 
+First goal: use linear regression
+
+Second goal: use yardstick (and broom??) to evaluate. Move on.
+
+
 ```{r property-sales-regressions}
+
+
+
+
+
+
+
 
 
 ```
