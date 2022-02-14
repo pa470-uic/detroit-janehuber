@@ -170,6 +170,7 @@ sales_trends_over_time
 
 ```
 
+In this time frame, home sales increase over time. This underlines the corrective nature of the assessments to reduce compared to home values.
 
 The Harris School of Public Policy at the University of Chicago's The Center For Municipal Finance produced the report ["An Evaluation of Residential Property Tax Assessments in the City of Detroit, 2016-2018"](https://harris.uchicago.edu/files/evalrespropertytaxasdetroit20162018.pdf) emphasizes the reduction of the number of assessments higher than sales, but that it's still too high. Let's examine the ratio of sales to assessments next.
 
@@ -227,7 +228,7 @@ linear_reg() %>%
   set_engine("lm") %>%
   set_mode("regression") %>%
   fit(sale_price ~ prop_class + sale_date,
-      data = sales_clean) %>% 
+      data = sales_clean) %>%
   tidy()
 
 
@@ -235,13 +236,13 @@ linear_reg() %>%
 
 ### Section D: Explore trends and relationships with foreclosures using simple regressions
 
-```{r foreclosures-regressions, include = true}
+```{r foreclosures-regressions, include = TRUE}
 
 foreclosure_glm <- logistic_reg() %>%
   set_engine("glm") %>%
   set_mode("classification") %>%
   fit(status ~ year_foreclosed,
-      data = foreclosures_clean) %>% 
+      data = foreclosures_clean) %>%
   tidy()
 
 foreclosure_glm
