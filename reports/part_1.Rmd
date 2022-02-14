@@ -45,13 +45,16 @@ https://harris.uchicago.edu/files/evalrespropertytaxasdetroit20162018.pdf
 
 
 ```{r data-exploration-cleaning, include = FALSE}
-
 # Sales
 # First, we pick only the columns we care about, then standardize the different types of sales terms (in case we want them some day). Finally, we will filter to only include valid arms length sales, following the methodology of the Center of Municipal Finance at the University of Chicago's study "An Evaluation of Residential Property Tax Assessments in the City of Detroit, 2016-2018". Not only does this restrict our data analysis to be more specifically verified, but it will greatly reduce the size of data.
+
+years_for_evaluation <- c('2016', '2017', '2018', '2019', '2020')
+
+#remove factor for sale date
 sales_clean <- 
   sales %>% 
   select(c(parcel_num, sale_date, sale_price, sale_terms)) %>% 
-  mutate(sale_date = as_factor(format(as.Date(sale_date), format="%Y")),
+  mutate(sale_date = format(as.Date(sale_date), format="%Y"),
          sale_terms = str_replace_all(sale_terms, "Not Arms Length", "NOT ARMS LENGTH"),
          sale_terms = str_replace_all(sale_terms, "not arms length", "NOT ARMS LENGTH"),
          sale_terms = str_replace_all(sale_terms, "valid arms length", "VALID ARMS LENGTH"),
@@ -59,45 +62,29 @@ sales_clean <-
          sale_terms = str_replace_all(sale_terms, "bank sale used", "BANK SALE USED"),
          sale_terms = str_replace_all(sale_terms, "00-NOT AUDITED", "NOT AUDITED"),
          sale_terms = as_factor(sale_terms)) %>% 
-  filter(sale_terms == "VALID ARMS LENGTH") 
+  filter(sale_terms == "VALID ARMS LENGTH",
+         sale_date %in% years_for_evaluation)
+
+# %>% 
+#   mutate(sale_date = factor(sale_date, levels=years_for_evaluation),
+#          sale_date = as.numeric(sale_date))
 
 # Assessments
 assessments_clean <-
   assessments %>%
-  select(-c(propclass)) %>%
   rename(c(parcel_num = PARCELNO,
            assessed_value = ASSESSEDVALUE,
            taxable_value = TAXABLEVALUE,
-           assessment_year = year))
-
-assessments_clean_wider <-
-  assessments_clean %>% 
-  pivot_wider(names_from = assessment_year,
-              values_from = assessed_value)
-
-years_for_evaluation <- c('2016', '2017', '2018', '2019')
-
-
-foreclosures_clean <- 
-  foreclosures %>% 
-  rename(parcel_num = prop_parcelnum) %>% 
-  pivot_longer(cols = years_for_evaluation,
-               names_to = "year_foreclosed",
-               values_to = "status",
-               values_drop_na = TRUE
-               ) %>% 
-  filter(year_foreclosed >= 2016,
-         year_foreclosed <= 2019) %>% 
-  select(c(parcel_num, year_foreclosed))
+           assessment_year = year,
+           prop_class = propclass))
 
 sales_and_assessments <- 
   left_join(sales_clean, assessments_clean) %>% 
-  filter(!is.na(sale_date),
-         sale_date > 2016,
-         assessment_year > 2011)
+  filter(!is.na(sale_date)) %>% 
+  mutate(sale_date = as.numeric(sale_date))
 
-sales_assessments_foreclosures <- 
-  left_join(sales_and_assessments, foreclosures_clean)
+# sales_assessments_foreclosures <- 
+#   left_join(sales_and_assessments, foreclosures_clean)
 
 ```
 
@@ -115,28 +102,28 @@ custom_theme <- theme_bw() +
 
 pacman::p_load(ggridges)
 
-# assessments_2011_2016 <- 
-#   assessments_clean %>% 
-#   filter(assessment_year %in% c(2011, 2012, 2013, 2014, 2015, 2016),
-#          assessed_value < (sd(assessed_value) * 2),
-#          assessed_value > 0) %>% 
-#   mutate(assessment_year = as.factor(assessment_year)) %>% 
-#   ggplot() +
-#   stat_density_ridges(aes(x = assessed_value, y = assessment_year),
-#                       fill = "blue", 
-#                       colour = "white", 
-#                       scale = 1, 
-#                       alpha = 0.6,
-#                       quantile_lines = TRUE, 
-#                       quantiles = 2) +
-#   xlab("Assessment Value") + 
-#   ylab("Year") + 
-#   ggtitle("Distribution of Assessements: 2011-2016") +
-#   custom_theme
+assessments_2016_2018 <-
+  assessments_clean %>%
+  filter(assessment_year %in% c(2016, 2017, 2018),
+         assessed_value < (sd(assessed_value) * 2),
+         assessed_value > 0) %>%
+  mutate(assessment_year = as.factor(assessment_year)) %>%
+  ggplot() +
+  stat_density_ridges(aes(x = assessed_value, y = assessment_year),
+                      fill = "blue",
+                      colour = "white",
+                      scale = 1,
+                      alpha = 0.6,
+                      quantile_lines = TRUE,
+                      quantiles = 2) +
+  xlab("Assessment Value") +
+  ylab("Year") +
+  ggtitle("Distribution of Assessements: 2016-2018") +
+  custom_theme
 
-assessments_2016_2022 <- 
+assessments_2019_2021 <- 
 assessments_clean %>% 
-  filter(assessment_year %in% c(2016, 2017, 2018, 2019, 2020, 2021, 2022),
+  filter(assessment_year %in% c(2019, 2020, 2021),
          assessed_value < (sd(assessed_value) * 2),
          assessed_value > 0) %>% 
   mutate(assessment_year = as.factor(assessment_year)) %>% 
@@ -150,12 +137,10 @@ assessments_clean %>%
                       quantiles = 2) +
   xlab("Assessment Value") + 
   ylab("Year") + 
-    ggtitle("Distribution of Assessements: 2017-2022") +
+    ggtitle("Distribution of Assessements: 2019-2021") +
   custom_theme
 
-assessments_2016_2022
-
-#grid.arrange(assessments_2011_2016, assessments_2017_2022, ncol = 2)
+grid.arrange(assessments_2016_2018, assessments_2019_2021, ncol = 2)
 
 ```
 
@@ -180,26 +165,27 @@ sales_trends_over_time
 
 The Harris School of Public Policy at the University of Chicago's The Center For Municipal Finance produced the report ["An Evaluation of Residential Property Tax Assessments in the City of Detroit, 2016-2018"](https://harris.uchicago.edu/files/evalrespropertytaxasdetroit20162018.pdf) emphasizes the reduction of the number of assessments higher than sales, but that it's still too high. Here, we can reproduce that finding with the data:
 
+
+We can also see that assessments 
 ```{r percentage-assessment-higher-sale, message = FALSE} 
-sales_and_assessments_data <- 
+sales_and_assessment_differences <- 
   sales_and_assessments %>% 
   select(-c(sale_terms, taxable_value)) %>% 
-  filter(!is.na(sale_price)) %>% 
+  filter(!is.na(sale_price),
+         sale_price <  1000000) %>% 
   mutate(assessment_sale_diff = (assessed_value - sale_price)) %>% 
-  select(c(sale_date, assessment_sale_diff)) %>% 
-  group_by(sale_date) %>% 
-  summarize(perc_assessment_higher = (sum(assessment_sale_diff >= 0)/n()))
+  filter(assessment_sale_diff < (sd(assessment_sale_diff) * 2))
 
-sales_and_assessment_difference_time <- 
-  sales_and_assessments_data %>% 
-  ggplot(aes(x = sale_date, y = perc_assessment_higher)) +
-  geom_line() +
+sales_and_assessment_differences_graph <- 
+  sales_and_assessment_differences %>% 
+  ggplot(aes(x = sale_price, y = assessment_sale_diff)) +
+  geom_point(size = 0.5, alpha = 0.2, colour="navy")+
   xlab("Year") + 
   ylab("Percent") + 
-  ggtitle("Percentage of Assessments Higher Than Sales in Detroit") +
+  ggtitle("Difference in Dollars Between of Assessments Higher Than Sales in Detroit") +
   custom_theme
 
-sales_and_assessment_difference_time
+sales_and_assessment_differences_graph
 
 ```
 
@@ -221,7 +207,7 @@ Remove data:
 
 
 
-```{r cmfproperty-sales-ratio, warning = FALSE, message = FALSE}
+```{r cmfproperty-sales-ratio, error = FALSE, warning = FALSE, message = FALSE, include = FALSE}
 
 
 ratios <-
@@ -232,29 +218,36 @@ ratios <-
     sale_year_col = "sale_date",
   )
 
-head(as.data.frame(ratios))
-
-
-
+# head(as.data.frame(ratios))
+#
 stats <- cmfproperty::calc_iaao_stats(ratios)
-head(stats)
+# head(stats)
 
 output <- diagnostic_plots(stats,
                            ratios,
                            min_reporting_yr = 2016,
                            max_reporting_yr = 2019)
 
-output[[1]]
-output[[2]]
-output[[3]]
-output[[4]]
-
-# cmfproperty::make_report(ratios,
-#                          jurisdiction_name = "Detroit",
-#                          output_dir = "~/Documents/")
+# Number of Arm's Length Sales
+# output[[1]]
 
 ```
 
+
+```{r cmfproperty-sale-price-assessed-value}
+# Sale Price (solid) & Assessed Value (Dashed)
+output[[2]]
+```
+
+```{r cmfproperty-ratio-sale-price-assessed-value}
+#Ratio between Assessed Value and Sale Price
+output[[3]]
+```
+
+```{r cmfproperty-inflation-sale-assessed}
+# # Inflation Adjusted Sale Price and Assessed Value
+output[[4]]
+```
 
 ### Section C: Explore trends and relationships with property sales using simple regressions
 
@@ -265,8 +258,7 @@ Second goal: use yardstick (and broom??) to evaluate. Move on.
 
 ```{r property-sales-regressions}
 
-
-
+# lm(sale.price ~ gross.square.feet + age + sale.year, data = sale_df)
 
 
 
