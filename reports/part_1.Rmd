@@ -12,7 +12,7 @@ editor_options:
 ---
 
 ```{r setup, include = FALSE}
-knitr::opts_chunk$set(echo = FALSE, warning = FALSE, error = FALSE)
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, error = FALSE, message = FALSE)
 library(tidyverse)
 library(lubridate)
 library(cmfproperty)
@@ -53,7 +53,8 @@ years_for_evaluation <- c('2016', '2017', '2018', '2019', '2020')
 #remove factor for sale date
 sales_clean <- 
   sales %>% 
-  select(c(parcel_num, sale_date, sale_price, sale_terms)) %>% 
+  select(c(parcel_num, sale_date, sale_price, sale_terms, property_c)) %>% 
+  rename(c(prop_class = property_c)) %>% 
   mutate(sale_date = format(as.Date(sale_date), format="%Y"),
          sale_terms = str_replace_all(sale_terms, "Not Arms Length", "NOT ARMS LENGTH"),
          sale_terms = str_replace_all(sale_terms, "not arms length", "NOT ARMS LENGTH"),
@@ -64,10 +65,6 @@ sales_clean <-
          sale_terms = as_factor(sale_terms)) %>% 
   filter(sale_terms == "VALID ARMS LENGTH",
          sale_date %in% years_for_evaluation)
-
-# %>% 
-#   mutate(sale_date = factor(sale_date, levels=years_for_evaluation),
-#          sale_date = as.numeric(sale_date))
 
 # Assessments
 assessments_clean <-
@@ -90,7 +87,7 @@ sales_and_assessments <-
 
 The UC Irvine Law Review's ["Taxed Out: Illegal Property Tax Assessments and the Epidemic of Tax Foreclosures in Detroit"](https://scholarship.law.uci.edu/ucilr/vol9/iss4/3/) explores the relationship between over-assessing a home and the ultimate foreclosure of that home. Let's first explore overall assessment values--how do they look over time?--and then see if we can discern any patterns visually in the data between over-assessment and an ultimate foreclosure.
 
-```{r exploratory-analysis-assessments, message=FALSE}
+```{r exploratory-analysis-assessments}
 
 custom_theme <- theme_bw() +
   theme(plot.title = element_text(size = 9),
@@ -146,7 +143,7 @@ grid.arrange(assessments_2016_2018, assessments_2019_2021, ncol = 2)
 
 Here, we can see that the average assessment decreased over time. Now, let's look at sales over time alongside those assessments; are home values also going down?
 
-```{r exploratory-analysis-sales, message=FALSE}
+```{r exploratory-analysis-sales}
 
 sales_trends_over_time <- 
   sales_clean %>% 
@@ -167,7 +164,7 @@ The Harris School of Public Policy at the University of Chicago's The Center For
 
 
 We can also see that assessments 
-```{r percentage-assessment-higher-sale, message = FALSE} 
+```{r percentage-assessment-higher-sale} 
 sales_and_assessment_differences <- 
   sales_and_assessments %>% 
   select(-c(sale_terms, taxable_value)) %>% 
@@ -200,15 +197,8 @@ Things I want to write:
 - Lean heavily on the strategy of the CCAO to exclude, then do that. Include
 - a link.
 
-Remove data:
-- Drop certain sales because of sale_terms; should look at what they mean
-- Drop certain sales if they are X (5?) number of standard deviations from the assessment, just like how the CCAO did it. In order to do this, I want to first standardize all of them... There are some goofy different ways of framing this.
 
-
-
-
-```{r cmfproperty-sales-ratio, error = FALSE, warning = FALSE, message = FALSE, include = FALSE}
-
+```{r cmfproperty-sales-ratio}
 
 ratios <-
   cmfproperty::reformat_data(
@@ -220,6 +210,7 @@ ratios <-
 
 # head(as.data.frame(ratios))
 #
+
 stats <- cmfproperty::calc_iaao_stats(ratios)
 # head(stats)
 
@@ -258,7 +249,7 @@ Second goal: use yardstick (and broom??) to evaluate. Move on.
 
 ```{r property-sales-regressions}
 
-# lm(sale.price ~ gross.square.feet + age + sale.year, data = sale_df)
+ lm(sales_clean ~ gross.square.feet + age + sale.year, data = sale_df)
 
 
 
