@@ -20,6 +20,7 @@ library(purrr)
 library(gridExtra)
 library(ggplot2)
 library(readxl)
+library(tidymodels)
 
 ```
 
@@ -62,6 +63,7 @@ sales_clean <-
          sale_terms = str_replace_all(sale_terms, "Valid Arms Length", "VALID ARMS LENGTH"),
          sale_terms = str_replace_all(sale_terms, "bank sale used", "BANK SALE USED"),
          sale_terms = str_replace_all(sale_terms, "00-NOT AUDITED", "NOT AUDITED"),
+         prop_class = as_factor(prop_class), 
          sale_terms = as_factor(sale_terms)) %>% 
   filter(sale_terms == "VALID ARMS LENGTH",
          sale_date %in% years_for_evaluation)
@@ -79,9 +81,6 @@ sales_and_assessments <-
   left_join(sales_clean, assessments_clean) %>% 
   filter(!is.na(sale_date)) %>% 
   mutate(sale_date = as.numeric(sale_date))
-
-# sales_assessments_foreclosures <- 
-#   left_join(sales_and_assessments, foreclosures_clean)
 
 ```
 
@@ -178,8 +177,8 @@ sales_and_assessment_differences_graph <-
   ggplot(aes(x = sale_price, y = assessment_sale_diff)) +
   geom_point(size = 0.5, alpha = 0.2, colour="navy")+
   xlab("Year") + 
-  ylab("Percent") + 
-  ggtitle("Difference in Dollars Between of Assessments Higher Than Sales in Detroit") +
+  ylab("Difference") + 
+  ggtitle("Difference in Dollars Between of Assessments And Sales in Detroit") +
   custom_theme
 
 sales_and_assessment_differences_graph
@@ -249,11 +248,17 @@ Second goal: use yardstick (and broom??) to evaluate. Move on.
 
 ```{r property-sales-regressions}
 
- lm(sales_clean ~ gross.square.feet + age + sale.year, data = sale_df)
+ lm(sale_price ~ prop_class + sale_date, data = sales_clean)
 
 
 
+lm_sales <- linear_reg() %>%
+  set_engine("lm") %>%
+  set_mode("regression") %>%
+  fit(sale_price ~ prop_class + sale_date,
+      data = sales_clean)
 
+lm_sales %>% tidy()
 
 
 ```
