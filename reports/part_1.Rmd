@@ -39,12 +39,6 @@ property_classifications <- read_xlsx("../files/OFFICE OF THE ASSESSORS_PROPERTY
 
 ### Section A: Exploratory Data Analysis
 
-
-Conduct an exploratory data analysis of homes in Detroit. Offer an overview of relevant trends in the data and data quality issues. Contextualize your analysis with key literature on properties in Detroit.
-https://scholarship.law.uci.edu/ucilr/vol9/iss4/3/
-https://harris.uchicago.edu/files/evalrespropertytaxasdetroit20162018.pdf
-
-
 ```{r data-exploration-cleaning, include = FALSE}
 # Sales
 # First, we pick only the columns we care about, then standardize the different types of sales terms (in case we want them some day). Finally, we will filter to only include valid arms length sales, following the methodology of the Center of Municipal Finance at the University of Chicago's study "An Evaluation of Residential Property Tax Assessments in the City of Detroit, 2016-2018". Not only does this restrict our data analysis to be more specifically verified, but it will greatly reduce the size of data.
@@ -75,16 +69,34 @@ assessments_clean <-
            assessed_value = ASSESSEDVALUE,
            taxable_value = TAXABLEVALUE,
            assessment_year = year,
-           prop_class = propclass))
+           prop_class = propclass)) %>% 
+  mutate(prop_class = as_factor(prop_class))
 
 sales_and_assessments <- 
   left_join(sales_clean, assessments_clean) %>% 
   filter(!is.na(sale_date)) %>% 
   mutate(sale_date = as.numeric(sale_date))
 
+
+#Foreclosures
+
+foreclosures_clean <- 
+  foreclosures %>% 
+  rename(parcel_num = prop_parcelnum) %>% 
+  pivot_longer(cols = c('2016', '2017', '2018', '2019'),
+               names_to = "year_foreclosed",
+               values_to = "status") %>% 
+  filter(year_foreclosed >= 2016,
+         year_foreclosed <= 2019) %>% 
+  mutate(status = if_else(is.na(status), 
+            0,
+            status),
+            status = as_factor(status))%>% 
+  select(c(parcel_num, year_foreclosed, status))
+
 ```
 
-The UC Irvine Law Review's ["Taxed Out: Illegal Property Tax Assessments and the Epidemic of Tax Foreclosures in Detroit"](https://scholarship.law.uci.edu/ucilr/vol9/iss4/3/) explores the relationship between over-assessing a home and the ultimate foreclosure of that home. Let's first explore overall assessment values--how do they look over time?--and then see if we can discern any patterns visually in the data between over-assessment and an ultimate foreclosure.
+The UC Irvine Law Review's ["Taxed Out: Illegal Property Tax Assessments and the Epidemic of Tax Foreclosures in Detroit"](https://scholarship.law.uci.edu/ucilr/vol9/iss4/3/) explores the relationship between over-assessing a home and the ultimate foreclosure of that home. Let's first explore overall assessment values--how do they look over time?
 
 ```{r exploratory-analysis-assessments}
 
@@ -159,42 +171,10 @@ sales_trends_over_time
 ```
 
 
-The Harris School of Public Policy at the University of Chicago's The Center For Municipal Finance produced the report ["An Evaluation of Residential Property Tax Assessments in the City of Detroit, 2016-2018"](https://harris.uchicago.edu/files/evalrespropertytaxasdetroit20162018.pdf) emphasizes the reduction of the number of assessments higher than sales, but that it's still too high. Here, we can reproduce that finding with the data:
-
-
-We can also see that assessments 
-```{r percentage-assessment-higher-sale} 
-sales_and_assessment_differences <- 
-  sales_and_assessments %>% 
-  select(-c(sale_terms, taxable_value)) %>% 
-  filter(!is.na(sale_price),
-         sale_price <  1000000) %>% 
-  mutate(assessment_sale_diff = (assessed_value - sale_price)) %>% 
-  filter(assessment_sale_diff < (sd(assessment_sale_diff) * 2))
-
-sales_and_assessment_differences_graph <- 
-  sales_and_assessment_differences %>% 
-  ggplot(aes(x = sale_price, y = assessment_sale_diff)) +
-  geom_point(size = 0.5, alpha = 0.2, colour="navy")+
-  xlab("Year") + 
-  ylab("Difference") + 
-  ggtitle("Difference in Dollars Between of Assessments And Sales in Detroit") +
-  custom_theme
-
-sales_and_assessment_differences_graph
-
-```
+The Harris School of Public Policy at the University of Chicago's The Center For Municipal Finance produced the report ["An Evaluation of Residential Property Tax Assessments in the City of Detroit, 2016-2018"](https://harris.uchicago.edu/files/evalrespropertytaxasdetroit20162018.pdf) emphasizes the reduction of the number of assessments higher than sales, but that it's still too high. Let's examine the ratio of sales to assessments next.
 
 
 ### Section B: Sales Ratio Study
-
-Use cmfproperty to conduct a sales ratio study across the relevant time period. Note that cmfproperty is designed to produce Rmarkdown reports but use the documentation and insert relevant graphs/figures into your report. Look to make this reproducible since you’ll need these methods to analyze your assessment model later on. Detroit has many sales which are not arm’s length (sold at fair market value) so some sales should be excluded, but which ones?
-https://erhla.github.io/cmfproperty/articles/cmfproperty.html
-
-Things I want to write:
-- What sort of data processing am I doing? What am I removing?
-- Lean heavily on the strategy of the CCAO to exclude, then do that. Include
-- a link.
 
 
 ```{r cmfproperty-sales-ratio}
@@ -223,6 +203,7 @@ output <- diagnostic_plots(stats,
 
 ```
 
+Here, we can see how sale prices over the last few years compared to assessed value and explore the ratio of those differences.
 
 ```{r cmfproperty-sale-price-assessed-value}
 # Sale Price (solid) & Assessed Value (Dashed)
@@ -234,38 +215,35 @@ output[[2]]
 output[[3]]
 ```
 
-```{r cmfproperty-inflation-sale-assessed}
-# # Inflation Adjusted Sale Price and Assessed Value
-output[[4]]
-```
 
 ### Section C: Explore trends and relationships with property sales using simple regressions
 
-First goal: use linear regression
+```{r property-sales-regressions, include = TRUE}
 
-Second goal: use yardstick (and broom??) to evaluate. Move on.
-
-
-```{r property-sales-regressions}
-
- lm(sale_price ~ prop_class + sale_date, data = sales_clean)
+# lm(sale_price ~ prop_class + sale_date, data = sales_clean)
 
 
-
-lm_sales <- linear_reg() %>%
+linear_reg() %>%
   set_engine("lm") %>%
   set_mode("regression") %>%
   fit(sale_price ~ prop_class + sale_date,
-      data = sales_clean)
-
-lm_sales %>% tidy()
+      data = sales_clean) %>% 
+  tidy()
 
 
 ```
 
 ### Section D: Explore trends and relationships with foreclosures using simple regressions
 
-```{r foreclosures-regressions}
+```{r foreclosures-regressions, include = true}
 
+foreclosure_glm <- logistic_reg() %>%
+  set_engine("glm") %>%
+  set_mode("classification") %>%
+  fit(status ~ year_foreclosed,
+      data = foreclosures_clean) %>% 
+  tidy()
+
+foreclosure_glm
 
 ```
