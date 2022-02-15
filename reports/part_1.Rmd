@@ -1,40 +1,250 @@
 ---
 title: "Part 1"
-author: "YOUR NAME"
+author: "Jane Huber"
 output: 
   html_document:
     code_folding: hide
     df_print: paged
     theme: sandstone
+    toc: true
+editor_options: 
+  chunk_output_type: console
 ---
 
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = FALSE, warning = FALSE)
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, error = FALSE, message = FALSE)
 library(tidyverse)
 library(lubridate)
+library(cmfproperty)
+library(purrr)
+library(gridExtra)
+library(ggplot2)
+library(readxl)
+library(tidymodels)
 
 ```
 
-Template file. Code will be included in folded blocks in the output to facilitate grading. Please knit this file and commit both the rmd and the html output. If you add external files to your analysis, please commit them to the files folder in this repository. NOTE: please do not commit large (15MB+) files to GitHub. Instead please denote the origin of the files in your code. 
+```{r download-data, include=FALSE}
 
-```{r}
-#example connection to database. note that you have to download the database from onedrive
-
-con <- DBI::dbConnect(RSQLite::SQLite(), "database/detroit.sqlite")
-
-# sales tbl
-
-dplyr::tbl(con, 'sales')
+con <- DBI::dbConnect(RSQLite::SQLite(), "../database/detroit.sqlite")
 
 # convert to tibble
-#dplyr::tbl(con, 'sales') %>% dplyr::collect()
+sales <- dplyr::tbl(con, 'sales') %>% dplyr::collect()
+assessments <- dplyr::tbl(con, 'assessments') %>% dplyr::collect()
+foreclosures <- dplyr::tbl(con, 'foreclosures') %>% dplyr::collect()
 
-# sql query
-
-dplyr::tbl(con, 'sales') %>% count(year(sale_date))
-
-#dplyr::tbl(con, 'sales') %>% count(year(sale_date)) %>% show_query()
+property_classifications <- read_xlsx("../files/OFFICE OF THE ASSESSORS_PROPERTY CLASSIFICATIONS -rev.xlsx")
 
 ```
 
+### Section A: Exploratory Data Analysis
 
+```{r data-exploration-cleaning, include = FALSE}
+# Sales
+# First, we pick only the columns we care about, then standardize the different types of sales terms (in case we want them some day). Finally, we will filter to only include valid arms length sales, following the methodology of the Center of Municipal Finance at the University of Chicago's study "An Evaluation of Residential Property Tax Assessments in the City of Detroit, 2016-2018". Not only does this restrict our data analysis to be more specifically verified, but it will greatly reduce the size of data.
+
+years_for_evaluation <- c('2016', '2017', '2018', '2019', '2020')
+
+#remove factor for sale date
+sales_clean <- 
+  sales %>% 
+  select(c(parcel_num, sale_date, sale_price, sale_terms, property_c)) %>% 
+  rename(c(prop_class = property_c)) %>% 
+  mutate(sale_date = format(as.Date(sale_date), format="%Y"),
+         sale_terms = str_replace_all(sale_terms, "Not Arms Length", "NOT ARMS LENGTH"),
+         sale_terms = str_replace_all(sale_terms, "not arms length", "NOT ARMS LENGTH"),
+         sale_terms = str_replace_all(sale_terms, "valid arms length", "VALID ARMS LENGTH"),
+         sale_terms = str_replace_all(sale_terms, "Valid Arms Length", "VALID ARMS LENGTH"),
+         sale_terms = str_replace_all(sale_terms, "bank sale used", "BANK SALE USED"),
+         sale_terms = str_replace_all(sale_terms, "00-NOT AUDITED", "NOT AUDITED"),
+         prop_class = as_factor(prop_class), 
+         sale_terms = as_factor(sale_terms)) %>% 
+  filter(sale_terms == "VALID ARMS LENGTH",
+         sale_date %in% years_for_evaluation)
+
+# Assessments
+assessments_clean <-
+  assessments %>%
+  rename(c(parcel_num = PARCELNO,
+           assessed_value = ASSESSEDVALUE,
+           taxable_value = TAXABLEVALUE,
+           assessment_year = year,
+           prop_class = propclass)) %>% 
+  mutate(prop_class = as_factor(prop_class))
+
+sales_and_assessments <- 
+  left_join(sales_clean, assessments_clean) %>% 
+  filter(!is.na(sale_date)) %>% 
+  mutate(sale_date = as.numeric(sale_date))
+
+
+#Foreclosures
+
+foreclosures_clean <- 
+  foreclosures %>% 
+  rename(parcel_num = prop_parcelnum) %>% 
+  pivot_longer(cols = c('2016', '2017', '2018', '2019'),
+               names_to = "year_foreclosed",
+               values_to = "status") %>% 
+  filter(year_foreclosed >= 2016,
+         year_foreclosed <= 2019) %>% 
+  mutate(status = if_else(is.na(status), 
+            0,
+            status),
+            status = as_factor(status))%>% 
+  select(c(parcel_num, year_foreclosed, status))
+
+```
+
+The UC Irvine Law Review's ["Taxed Out: Illegal Property Tax Assessments and the Epidemic of Tax Foreclosures in Detroit"](https://scholarship.law.uci.edu/ucilr/vol9/iss4/3/) explores the relationship between over-assessing a home and the ultimate foreclosure of that home. Let's first explore overall assessment values--how do they look over time?
+
+```{r exploratory-analysis-assessments}
+
+custom_theme <- theme_bw() +
+  theme(plot.title = element_text(size = 9),
+        axis.title.x = element_text(size = 9), 
+        axis.title.y = element_text(size = 9))
+
+
+# Get distribution of assessment value by year
+
+pacman::p_load(ggridges)
+
+assessments_2016_2018 <-
+  assessments_clean %>%
+  filter(assessment_year %in% c(2016, 2017, 2018),
+         assessed_value < (sd(assessed_value) * 2),
+         assessed_value > 0) %>%
+  mutate(assessment_year = as.factor(assessment_year)) %>%
+  ggplot() +
+  stat_density_ridges(aes(x = assessed_value, y = assessment_year),
+                      fill = "blue",
+                      colour = "white",
+                      scale = 1,
+                      alpha = 0.6,
+                      quantile_lines = TRUE,
+                      quantiles = 2) +
+  xlab("Assessment Value") +
+  ylab("Year") +
+  ggtitle("Distribution of Assessements: 2016-2018") +
+  custom_theme
+
+assessments_2019_2021 <- 
+assessments_clean %>% 
+  filter(assessment_year %in% c(2019, 2020, 2021),
+         assessed_value < (sd(assessed_value) * 2),
+         assessed_value > 0) %>% 
+  mutate(assessment_year = as.factor(assessment_year)) %>% 
+  ggplot() +
+  geom_density_ridges(aes(x = assessed_value, y = assessment_year),
+                      fill = "blue", 
+                      colour = "white", 
+                      scale = 1, 
+                      alpha = 0.6,
+                      quantile_lines = TRUE, 
+                      quantiles = 2) +
+  xlab("Assessment Value") + 
+  ylab("Year") + 
+    ggtitle("Distribution of Assessements: 2019-2021") +
+  custom_theme
+
+grid.arrange(assessments_2016_2018, assessments_2019_2021, ncol = 2)
+
+```
+
+Here, we can see that the average assessment decreased over time. Now, let's look at sales over time alongside those assessments; are home values also going down?
+
+```{r exploratory-analysis-sales}
+
+sales_trends_over_time <- 
+  sales_clean %>% 
+  filter(sale_price < (sd(sale_price) * 3)) %>% 
+  ggplot() +
+  geom_boxplot(aes(sale_date,sale_price)) +
+  xlab("Year") + 
+  ylab("Price") + 
+  ggtitle("Detroit Home Sales") +
+  custom_theme
+
+sales_trends_over_time
+
+```
+
+In this time frame, home sales increase over time. This underlines the corrective nature of the assessments to reduce compared to home values.
+
+The Harris School of Public Policy at the University of Chicago's The Center For Municipal Finance produced the report ["An Evaluation of Residential Property Tax Assessments in the City of Detroit, 2016-2018"](https://harris.uchicago.edu/files/evalrespropertytaxasdetroit20162018.pdf) emphasizes the reduction of the number of assessments higher than sales, but that it's still too high. Let's examine the ratio of sales to assessments next.
+
+
+### Section B: Sales Ratio Study
+
+
+```{r cmfproperty-sales-ratio}
+
+ratios <-
+  cmfproperty::reformat_data(
+    data = sales_and_assessments,
+    sale_col = "sale_price",
+    assessment_col = "assessed_value",
+    sale_year_col = "sale_date",
+  )
+
+# head(as.data.frame(ratios))
+#
+
+stats <- cmfproperty::calc_iaao_stats(ratios)
+# head(stats)
+
+output <- diagnostic_plots(stats,
+                           ratios,
+                           min_reporting_yr = 2016,
+                           max_reporting_yr = 2019)
+
+# Number of Arm's Length Sales
+# output[[1]]
+
+```
+
+Here, we can see how sale prices over the last few years compared to assessed value and explore the ratio of those differences.
+
+```{r cmfproperty-sale-price-assessed-value}
+# Sale Price (solid) & Assessed Value (Dashed)
+output[[2]]
+```
+
+```{r cmfproperty-ratio-sale-price-assessed-value}
+#Ratio between Assessed Value and Sale Price
+output[[3]]
+```
+
+
+### Section C: Explore trends and relationships with property sales using simple regressions
+
+```{r property-sales-regressions, include = TRUE}
+
+# lm(sale_price ~ prop_class + sale_date, data = sales_clean)
+
+
+linear_reg() %>%
+  set_engine("lm") %>%
+  set_mode("regression") %>%
+  fit(sale_price ~ prop_class + sale_date,
+      data = sales_clean) %>%
+  tidy()
+
+
+```
+
+### Section D: Explore trends and relationships with foreclosures using simple regressions
+
+```{r foreclosures-regressions, include = TRUE}
+
+foreclosure_glm <- logistic_reg() %>%
+  set_engine("glm") %>%
+  set_mode("classification") %>%
+  fit(status ~ year_foreclosed,
+      data = foreclosures_clean) %>%
+  tidy()
+
+foreclosure_glm
+
+```

@@ -17,6 +17,7 @@ Built from numerous FOIA requests, this table includes information on assessment
 ### blight
 
 See: https://data.detroitmi.gov/datasets/blight-violations/explore
+ Blight Violation Notices (BVN), or Blight Tickets, that have been issued to property owners who have violated City of Detroit ordinances that govern how property owners must maintain the exterior of their property. Blight Tickets are issued by city inspectors, police officers, neighborhood city hall managers and other city officials who investigate complaints of blight and are managed by the Department of Administrative Hearings. Blight tickets that are issued may be subsequently voided by the ticket writing department for various reasons.
 
 ### parcels
 
