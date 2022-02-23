@@ -38,6 +38,8 @@ con <- DBI::dbConnect(RSQLite::SQLite(), "database/detroit.sqlite")
 sales <- dplyr::tbl(con, 'sales') %>% dplyr::collect()
 assessments <- dplyr::tbl(con, 'assessments') %>% dplyr::collect()
 foreclosures <- dplyr::tbl(con, 'foreclosures') %>% dplyr::collect()
+parcels <- dplyr::tbl(con, 'parcels') %>% dplyr::collect()
+parcels_historic <- dplyr::tbl(con, 'parcels_historic') %>% dplyr::collect()
 
 # property_classifications <- read_xlsx("files/OFFICE OF THE ASSESSORS_PROPERTY CLASSIFICATIONS -rev.xlsx")
 ```
@@ -76,6 +78,40 @@ assessments_clean <-
            prop_class = propclass)) %>% 
   mutate(prop_class = as_factor(prop_class)) %>% 
   filter(assessed_value > 2000)
+
+# Parcels: Create a parcels tibble that combines historic with all. Can filter down later if needed.
+parcels_current_clean <-
+  parcels %>%
+  rename(parcel_num = parcel_number) %>%
+  mutate(zip_code = as.numeric(zip_code),
+         property_class = as.factor(property_class))
+
+parcels_historic_clean <-
+  parcels_historic %>%
+  rename(parcel_num = PARCELNO,
+         address = PROPADDR,
+         zip_code = ZIPCODE,
+         taxpayer_1 = TAXPAYER1,
+         taxpayer_street = TAXPADDR,
+         taxpayer_city = TAXPCITY,
+         taxpayer_state = TAXPSTATE,
+         taxpayer_zip = TAXPZIP,
+         property_class = propclass,
+         tax_status = TAXSTATUS,
+         total_square_footage = TOTALSQFT,
+         total_acreage = TOTALACREAGE,
+         frontage = FRONTAGE,
+         homestead_pre = PRE,
+         sale_price = SALEPRICE,
+         sale_date = SALEDATE,
+         assessed_value = ASSESSEDVALUE,
+         taxable_value = TAXABLEVALUE) %>%
+  mutate(zip_code = as.numeric(zip_code),
+         property_class = as.factor(property_class))
+
+parcels_clean <-
+  left_join(parcels_current_clean, parcels_historic_clean)
+
 
 sales_and_assessments <- 
   left_join(sales_clean, assessments_clean) %>% 
