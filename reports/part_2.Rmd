@@ -11,6 +11,12 @@ output:
 editor_options: 
   chunk_output_type: console
 ---
+Questions to ask in class:
+
+1. Can we go over classification tables 8.3 and 8.4 from the textbook and the classification probability metric ROC curves? Specifically, the metric ROC curves.
+2. 
+
+
 
 ```{r setup, include = FALSE}
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, error = FALSE, message = FALSE)
@@ -26,14 +32,135 @@ library(tidymodels)
 
 ```{r download-data, include=FALSE}
 
-con <- DBI::dbConnect(RSQLite::SQLite(), "../database/detroit.sqlite")
+con <- DBI::dbConnect(RSQLite::SQLite(), "database/detroit.sqlite")
 
 # convert to tibble
 sales <- dplyr::tbl(con, 'sales') %>% dplyr::collect()
 assessments <- dplyr::tbl(con, 'assessments') %>% dplyr::collect()
 foreclosures <- dplyr::tbl(con, 'foreclosures') %>% dplyr::collect()
 
-property_classifications <- read_xlsx("../files/OFFICE OF THE ASSESSORS_PROPERTY CLASSIFICATIONS -rev.xlsx")
+# property_classifications <- read_xlsx("files/OFFICE OF THE ASSESSORS_PROPERTY CLASSIFICATIONS -rev.xlsx")
+```
+
+```{r data-exploration-cleaning, include = FALSE}
+# Sales
+# First, we pick only the columns we care about, then standardize the different types of sales terms (in case we want them some day). Finally, we will filter to only include valid arms length sales, following the methodology of the Center of Municipal Finance at the University of Chicago's study "An Evaluation of Residential Property Tax Assessments in the City of Detroit, 2016-2018". Not only does this restrict our data analysis to be more specifically verified, but it will greatly reduce the size of data.
+
+years_for_evaluation <- c('2016', '2017', '2018', '2019')
+
+#remove factor for sale date
+sales_clean <- 
+  sales %>% 
+  select(c(parcel_num, sale_date, sale_price, sale_terms, property_c)) %>% 
+  rename(c(prop_class = property_c)) %>% 
+  mutate(sale_date = format(as.Date(sale_date), format="%Y"),
+         sale_terms = str_replace_all(sale_terms, "Not Arms Length", "NOT ARMS LENGTH"),
+         sale_terms = str_replace_all(sale_terms, "not arms length", "NOT ARMS LENGTH"),
+         sale_terms = str_replace_all(sale_terms, "valid arms length", "VALID ARMS LENGTH"),
+         sale_terms = str_replace_all(sale_terms, "Valid Arms Length", "VALID ARMS LENGTH"),
+         sale_terms = str_replace_all(sale_terms, "bank sale used", "BANK SALE USED"),
+         sale_terms = str_replace_all(sale_terms, "00-NOT AUDITED", "NOT AUDITED"),
+         prop_class = as_factor(prop_class), 
+         sale_terms = as_factor(sale_terms)) %>% 
+  filter(sale_terms == "VALID ARMS LENGTH",
+         sale_date %in% years_for_evaluation,
+         prop_class == '401')
+
+# Assessments
+assessments_clean <-
+  assessments %>%
+  rename(c(parcel_num = PARCELNO,
+           assessed_value = ASSESSEDVALUE,
+           taxable_value = TAXABLEVALUE,
+           assessment_year = year,
+           prop_class = propclass)) %>% 
+  mutate(prop_class = as_factor(prop_class)) %>% 
+  filter(assessed_value > 2000)
+
+sales_and_assessments <- 
+  left_join(sales_clean, assessments_clean) %>% 
+  filter(!is.na(sale_date)) %>% 
+  mutate(sale_date = as.numeric(sale_date))
+```
+Decision here: do I want to use logistic regression or random forest to attempt to classify predictions?
+
+Remember: use data from 2016.
+
+Evaluate using: classification metrics from tables 8.3 and 8.4 from the textbook and the classification probability metric ROC curves.
+
+```{r classify-home-as-overassessed}
+
+# Get data filtered
+overassessed <- 
+sales_and_assessments %>% 
+  filter(sale_date == 2016,
+         assessment_year == 2016) %>% 
+  mutate(overassessed = if_else(sale_price < assessed_value,
+                                TRUE,
+                                FALSE))
+
+split <- rsample::initial_split(overassessed)
+
+train <- training(split)
+test <- testing(split)
+
+#add in neighborhood!
+log_model <- logistic_reg() %>%
+  set_engine('glm') %>%
+  set_mode('classification') %>%
+  fit(overassessed ~ sale_price,
+      data = train)
+
+
+# tree_model <-
+#   parsnip::decision_tree(tree_depth=5) %>%
+#   set_engine("rpart") %>%
+#   set_mode('regression')
+
+### What I want: 
+#recipe that sets (is_overassessed ~ neighborhood, sale-price, data-train)
+#step_mutate(is_overasessed = sale < assessment)
+# step_log ????
+
+  # step_unknown(all_nominal_predictors()) %>%
+  # step_dummy(all_nominal_predictors()) %>%
+  # step_corr(all_predictors())
+
+
+overassessed_recipe <- 
+  recipe(Sale_Price ~ Neighborhood + Gr_Liv_Area + Year_Built + Bldg_Type + 
+           Latitude + Longitude, data = ames_train) %>%
+  step_log(Gr_Liv_Area, base = 10) %>% 
+  step_other(Neighborhood, threshold = 0.01) %>% 
+  step_dummy(all_nominal_predictors()) %>% 
+  step_interact( ~ Gr_Liv_Area:starts_with("Bldg_Type_") ) %>% 
+  step_ns(Latitude, Longitude, deg_free = 20)
+  
+#Need to come up with the correct type of lm model
+
+lm_model <- linear_reg() %>% set_engine("lm")
+
+lm_wflow <- 
+  workflow() %>% 
+  add_model(lm_model) %>% 
+  add_recipe(ames_rec)
+
+#Evaluate this
+lm_fit <- fit(lm_wflow, ames_train)
+
+
+#Evaluate according to the charts
+
 ```
 
 
+Need to do a yardstick evaluation at the bottom of this work:
+```{r}
+
+# yardstick::mape(divvy_preds, 
+#      truth = rides,
+#      estimate = .pred)
+# yardstick::rmse(divvy_preds, 
+#      truth = rides,
+#      estimate = .pred)
+```
