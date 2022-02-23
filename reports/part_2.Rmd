@@ -110,13 +110,17 @@ parcels_historic_clean <-
          property_class = as.factor(property_class))
 
 parcels_clean <-
-  left_join(parcels_current_clean, parcels_historic_clean)
+  left_join(parcels_current_clean, parcels_historic_clean) %>% 
+  select(c(ward, parcel_num, council_district, zip_code))
 
 
 sales_and_assessments <- 
   left_join(sales_clean, assessments_clean) %>% 
   filter(!is.na(sale_date)) %>% 
   mutate(sale_date = as.numeric(sale_date))
+
+sales_assessments_parcels <- 
+  left_join(sales_and_assessments, parcels_clean) 
 ```
 Decision here: do I want to use logistic regression or random forest to attempt to classify predictions?
 
@@ -128,12 +132,12 @@ Evaluate using: classification metrics from tables 8.3 and 8.4 from the textbook
 
 # Get data filtered
 overassessed <- 
-sales_and_assessments %>% 
+sales_assessments_parcels %>% 
   filter(sale_date == 2016,
          assessment_year == 2016) %>% 
-  mutate(overassessed = if_else(sale_price < assessed_value,
-                                TRUE,
-                                FALSE))
+  mutate(overassessed = as_factor(if_else(sale_price < assessed_value,
+                                1,
+                                0)))
 
 split <- rsample::initial_split(overassessed)
 
@@ -141,11 +145,10 @@ train <- training(split)
 test <- testing(split)
 
 #add in neighborhood!
-log_model <- logistic_reg() %>%
+log_model <- 
+  logistic_reg() %>%
   set_engine('glm') %>%
-  set_mode('classification') %>%
-  fit(overassessed ~ sale_price,
-      data = train)
+  set_mode('classification')
 
 
 # tree_model <-
@@ -153,36 +156,21 @@ log_model <- logistic_reg() %>%
 #   set_engine("rpart") %>%
 #   set_mode('regression')
 
-### What I want: 
-#recipe that sets (is_overassessed ~ neighborhood, sale-price, data-train)
-#step_mutate(is_overasessed = sale < assessment)
-# step_log ????
-
-  # step_unknown(all_nominal_predictors()) %>%
-  # step_dummy(all_nominal_predictors()) %>%
-  # step_corr(all_predictors())
-
-
 overassessed_recipe <- 
-  recipe(Sale_Price ~ Neighborhood + Gr_Liv_Area + Year_Built + Bldg_Type + 
-           Latitude + Longitude, data = ames_train) %>%
-  step_log(Gr_Liv_Area, base = 10) %>% 
-  step_other(Neighborhood, threshold = 0.01) %>% 
-  step_dummy(all_nominal_predictors()) %>% 
-  step_interact( ~ Gr_Liv_Area:starts_with("Bldg_Type_") ) %>% 
-  step_ns(Latitude, Longitude, deg_free = 20)
+  recipe(overassessed ~ sale_price + ward + zip_code,
+      data = train) %>%
+  step_other(ward, threshold = 0.01) %>% 
+  step_other(zip_code, threshold = 0.01) %>% 
+  step_unknown(all_nominal_predictors()) %>%
+  step_dummy(all_nominal_predictors())
   
-#Need to come up with the correct type of lm model
-
-lm_model <- linear_reg() %>% set_engine("lm")
-
-lm_wflow <- 
-  workflow() %>% 
-  add_model(lm_model) %>% 
-  add_recipe(ames_rec)
+log_wflow <- 
+  workflow() %>%
+  add_model(log_model) %>% 
+  add_recipe(overassessed_recipe)
 
 #Evaluate this
-lm_fit <- fit(lm_wflow, ames_train)
+log_fit <- fit(log_wflow, overassessed)
 
 
 #Evaluate according to the charts
