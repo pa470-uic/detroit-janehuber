@@ -135,7 +135,7 @@ overassessed <-
 sales_assessments_parcels %>% 
   filter(sale_date == 2016,
          assessment_year == 2016) %>% 
-  mutate(overassessed = as_factor(if_else(sale_price < assessed_value,
+  mutate(overassessed = as_factor(if_else(sale_price < (assessed_value * 2),
                                 1,
                                 0)))
 
