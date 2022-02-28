@@ -12,23 +12,6 @@ editor_options:
   chunk_output_type: console
 ---
 
-Jane To-Do:
-1. Conclude Part B by making the tables from the textbook, 8.3 and 8.4
-Evaluation:
-8.3 is false positive/false negative/true positive/true negative.
-8.4 gives an analysis of the significance of all of these things.
-
-30 minutes.
-
-
-2. Part C. Max 2 hours.
-
-3. Grab plots from first part of this assignment, add in limited commentary. Max 1 hour here.
-
-
-
-
-
 ```{r setup, include = FALSE}
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, error = FALSE, message = FALSE)
 library(tidyverse)
@@ -44,6 +27,9 @@ library(glmnet)
 
 ### Part A
 
+Homes in Detroit have suffered from poorly assessed home values, which has contributed greatly to foreclosure during a time of economic instability. The UC Irvine Law Review's ["Taxed Out: Illegal Property Tax Assessments and the Epidemic of Tax Foreclosures in Detroit"](https://scholarship.law.uci.edu/ucilr/vol9/iss4/3/) analyzes  the relationship between over-assessing a home and its role in driving foreclosures, exposing government's role in creating conditions for people to lose their homes. The Harris School of Public Policy at the University of Chicago's The Center For Municipal Finance produced the report ["An Evaluation of Residential Property Tax Assessments in the City of Detroit, 2016-2018"](https://harris.uchicago.edu/files/evalrespropertytaxasdetroit20162018.pdf) shows how the city of Detroit attempted to correct that mistake, reducing the number of assessments higher than sales, but that it's still too high.
+
+
 ```{r download-data, include=FALSE}
 
 con <- DBI::dbConnect(RSQLite::SQLite(), "../database/detroit.sqlite")
@@ -54,6 +40,11 @@ assessments <- dplyr::tbl(con, 'assessments') %>% dplyr::collect()
 foreclosures <- dplyr::tbl(con, 'foreclosures') %>% dplyr::collect()
 parcels <- dplyr::tbl(con, 'parcels') %>% dplyr::collect()
 parcels_historic <- dplyr::tbl(con, 'parcels_historic') %>% dplyr::collect()
+
+custom_theme <- theme_bw() +
+  theme(plot.title = element_text(size = 9),
+        axis.title.x = element_text(size = 9), 
+        axis.title.y = element_text(size = 9))
 
 # property_classifications <- read_xlsx("files/OFFICE OF THE ASSESSORS_PROPERTY CLASSIFICATIONS -rev.xlsx")
 ```
@@ -121,11 +112,13 @@ parcels_historic_clean <-
          assessed_value = ASSESSEDVALUE,
          taxable_value = TAXABLEVALUE) %>%
   mutate(zip_code = as.numeric(zip_code),
-         property_class = as.factor(property_class))
+         property_class = as.factor(property_class)) %>% 
+  filter(!is.na(total_square_footage))
 
 parcels_clean <-
   left_join(parcels_current_clean, parcels_historic_clean) %>% 
-  select(c(ward, parcel_num, council_district, zip_code))
+  select(c(ward, parcel_num, council_district, zip_code, total_square_footage)) %>% 
+  mutate(zip_code = as.numeric(zip_code))
 
 
 sales_and_assessments <- 
@@ -137,9 +130,118 @@ sales_assessments_parcels <-
   left_join(sales_and_assessments, parcels_clean) 
 ```
 
+Big picture, the distribution of assessment values for Detroit has widened, with the mean assessment increasing over time. However, we can still see that there is a concentration of assessment values for lower home valuation. 
+
+```{r exploratory-analysis-assessments}
+
+
+# Get distribution of assessment value by year
+
+pacman::p_load(ggridges)
+
+assessments_2016_2018 <-
+  assessments_clean %>%
+  filter(assessment_year %in% c(2016, 2017, 2018),
+         assessed_value < (sd(assessed_value) * 2),
+         assessed_value > 0) %>%
+  mutate(assessment_year = as.factor(assessment_year)) %>%
+  ggplot() +
+  stat_density_ridges(aes(x = assessed_value, y = assessment_year),
+                      fill = "blue",
+                      colour = "white",
+                      scale = 1,
+                      alpha = 0.6,
+                      quantile_lines = TRUE,
+                      quantiles = 2) +
+  xlab("Assessment Value") +
+  ylab("Year") +
+  ggtitle("Distribution of Assessements: 2016-2018") +
+  custom_theme
+
+assessments_2019_2021 <- 
+assessments_clean %>% 
+  filter(assessment_year %in% c(2019, 2020, 2021),
+         assessed_value < (sd(assessed_value) * 2),
+         assessed_value > 0) %>% 
+  mutate(assessment_year = as.factor(assessment_year)) %>% 
+  ggplot() +
+  geom_density_ridges(aes(x = assessed_value, y = assessment_year),
+                      fill = "blue", 
+                      colour = "white", 
+                      scale = 1, 
+                      alpha = 0.6,
+                      quantile_lines = TRUE, 
+                      quantiles = 2) +
+  xlab("Assessment Value") + 
+  ylab("Year") + 
+    ggtitle("Distribution of Assessements: 2019-2021") +
+  custom_theme
+
+grid.arrange(assessments_2016_2018, assessments_2019_2021, ncol = 2)
+
+```
+
+Even as assessments decrease over time, overall sale values have been increasing. This tells us that assessment values are attempting to better respond to and assess more expensive homes for sale in Detroit.
+
+```{r exploratory-analysis-sales, message=FALSE}
+
+sales_trends_over_time <- 
+  sales_clean %>% 
+  filter(sale_price < (sd(sale_price) * 3)) %>% 
+  ggplot() +
+  geom_boxplot(aes(sale_date,sale_price)) +
+  xlab("Year") + 
+  ylab("Price") + 
+  ggtitle("Detroit Home Sales") +
+  custom_theme
+
+sales_trends_over_time
+
+```
+
+
+```{r cmfproperty-sales-ratio}
+
+ratios <-
+  cmfproperty::reformat_data(
+    data = sales_and_assessments,
+    sale_col = "sale_price",
+    assessment_col = "assessed_value",
+    sale_year_col = "sale_date",
+  )
+
+stats <- cmfproperty::calc_iaao_stats(ratios)
+
+output <- diagnostic_plots(stats,
+                           ratios,
+                           min_reporting_yr = 2016,
+                           max_reporting_yr = 2019)
+
+
+```
+
+Detroit's assessment values across percentile home values appear to have remained steady in dollars since 2016, even as home assessments increased over time. It is important to note, however, that the red line (homes at the 25th percentile of sale price) have the smallest gap between their assessed value and their sale price. This helps us to see the way in which inequality has been exacerbated by assessing homes at a much closer value to their sale price than for more expensive homes.
+
+```{r cmfproperty-sale-price-assessed-value}
+# Sale Price (solid) & Assessed Value (Dashed)
+output[[2]]
+```
+
+
+Detroit aims to assess homes at 50% their value, however they have historically overassessed at a relatively alarming rate. We can see how they have attempted to correct for this overassessment since 2016, but nevertheless, a large number of homes remain overassessed.
+
+```{r cmfproperty-ratio-sale-price-assessed-value}
+#Ratio between Assessed Value and Sale Price
+output[[3]]
+```
+
+
+
 ### Part B
 
-```{r classify-home-as-overassessed}
+Let's construct a model to determine whether or not a home was overassessed in 2016. We will use logistic regression to help us predict whether something will be "overassessed" or "underassessed". In Detroit, homes are assessed at 50% value--meaning that if a home was sold for \$100,000, it would be assessed for $50,000.  
+
+```{r classify-home-as-overassessed, include=TRUE}
 
 # Get data filtered
 overassessed <- 
@@ -156,7 +258,9 @@ train <- training(split)
 test <- testing(split)
 
 
-# Wanted to use a random forest here, but couldn't figure out the best way to visualize
+# Wanted to use a random forest here, but couldn't figure out the best way to visualize.
+
+# Additionally, I tried to include total_square_footage in the model, and was unable to get any "YES" in my graphs... 
 # Would love to discuss in class further.
 
 # rand_forest_model <- 
@@ -187,8 +291,6 @@ wflow <-
 #Evaluate model
 rf_fit <- fit(wflow, overassessed)
 
-# rf_fit %>% tidy() %>% view()
-
 homes_2016 <- 
   train %>% 
   filter(sale_date == 2016)
@@ -198,7 +300,7 @@ overassessment_predictions <-
 
 ```
 
-Our model, it turns out, is relatively effective at determining whether or not a property will be overassesed.
+After running our model, it is relatively effective at determining whether or not a property will be overassesed.
 
 ```{r evaluate-overassessments}
 
@@ -250,6 +352,8 @@ autoplot(roc_curve)
 
 ### Part C
 
+Next, we will create a model to predict sale prices for homes in 2019.
+
 ```{r sale-predictions-2019}
 
 split_sales <- rsample::initial_split(sales_assessments_parcels)
@@ -286,18 +390,20 @@ sales_2019 <-
 sale_price_predictions <- 
   augment(rf_fit_sales, sales_2019)
 
-sale_price_predictions
-
 ```
 
+Now that we have run the model, we will use MAPE as a first evaluation.
+```{r mape-analysis}
 
-```{r mape-mpse-analysis}
-
+#I don't understand why I'm getting an Infinite value here...
 yardstick::mape(sale_price_predictions,
      truth = sale_price,
      estimate = .pred)
+```
 
+Next, we will use RMSE to further evaluate the model.
 
+```{r rmse-analysis}
 yardstick::rmse(sale_price_predictions,
      truth = sale_price,
      estimate = .pred)
