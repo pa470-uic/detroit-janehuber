@@ -43,7 +43,7 @@ library(tidymodels)
 
 ```{r download-data, include=FALSE}
 
-con <- DBI::dbConnect(RSQLite::SQLite(), "database/detroit.sqlite")
+con <- DBI::dbConnect(RSQLite::SQLite(), "../database/detroit.sqlite")
 
 # convert to tibble
 sales <- dplyr::tbl(con, 'sales') %>% dplyr::collect()
@@ -133,11 +133,7 @@ sales_and_assessments <-
 sales_assessments_parcels <- 
   left_join(sales_and_assessments, parcels_clean) 
 ```
-Decision here: do I want to use logistic regression or random forest to attempt to classify predictions?
 
-Remember: use data from 2016.
-
-Evaluate using: classification metrics from tables 8.3 and 8.4 from the textbook and the classification probability metric ROC curves.
 
 ```{r classify-home-as-overassessed}
 
@@ -213,7 +209,31 @@ overassment_evaluation <-
 overassment_evaluation
 
 
+# Create a classifier metrics table to help us further evaluate our model.
 
+true_negative <- overassment_evaluation$predicted_not_overassessed[1]
+false_negative <- overassment_evaluation$predicted_not_overassessed[2]
+false_positive <- overassment_evaluation$predicted_overassessed[1]
+true_positive <- overassment_evaluation$predicted_overassessed[2]
+
+true_positive_rate <- true_positive / (true_positive + false_negative)
+true_negative_rate <- true_negative / (true_negative + false_positive)
+false_positive_rate <- false_positive /(false_positive + true_negative)
+false_negative_rate <- false_negative / (false_negative + true_positive)
+positive_predictive_value <- true_positive / (true_positive + false_positive)
+
+classifier_metrics_table <- tibble(measurement = c("true positive rate", 
+                                                   "true negative rate",
+                                                   "false positive rate",
+                                                   "false positive rate",
+                                                   "positive predictive value"), 
+                                   `value` = c(true_positive_rate, 
+                                               true_negative_rate,
+                                               false_positive_rate,
+                                               false_negative_rate,
+                                               positive_predictive_value))
+
+classifier_metrics_table
 
 ```
 
