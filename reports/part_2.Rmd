@@ -39,7 +39,10 @@ library(gridExtra)
 library(ggplot2)
 library(readxl)
 library(tidymodels)
+library(glmnet)
 ```
+
+### Part A
 
 ```{r download-data, include=FALSE}
 
@@ -134,6 +137,7 @@ sales_assessments_parcels <-
   left_join(sales_and_assessments, parcels_clean) 
 ```
 
+### Part B
 
 ```{r classify-home-as-overassessed}
 
@@ -192,11 +196,9 @@ homes_2016 <-
 overassessment_predictions <- 
   augment(rf_fit, homes_2016)
 
-
 ```
 
-Our model, it turns out, is relatively effective at determining whether or not a property will be overassesed. You can see that the Positive Predictive Value (PPV) is 83%.
-
+Our model, it turns out, is relatively effective at determining whether or not a property will be overassesed.
 
 ```{r evaluate-overassessments}
 
@@ -237,24 +239,67 @@ classifier_metrics_table
 
 ```
 
-Furthermore, an ROC curve further demonstrates how effective our model is at determining whether a property is likely to be overassessed.
+Furthermore, an ROC curve further demonstrates the effectiveness of our model is at determining whether a property is likely to be overassessed.
 
-```{r roc-curve}
+```{r roc-curve-overassessments}
 
 roc_curve <- yardstick::roc_curve(data = overassessment_predictions, truth = overassessed, .pred_NO)
 
-
-# roc_curve
 autoplot(roc_curve)
 ```
 
-Need to do a yardstick evaluation at the bottom of this work:
-```{r}
+### Part C
 
-# yardstick::mape(divvy_preds, 
-#      truth = rides,
-#      estimate = .pred)
-# yardstick::rmse(divvy_preds, 
-#      truth = rides,
-#      estimate = .pred)
+```{r sale-predictions-2019}
+
+split_sales <- rsample::initial_split(sales_assessments_parcels)
+
+train_sales <- training(split_sales)
+test_sales <- testing(split_sales)
+
+linear_model_sales <- 
+  linear_reg() %>% 
+  set_engine("lm") 
+
+sale_price_recipe <- 
+  recipe(sale_price ~ ward + zip_code + assessed_value,
+      data = train_sales) %>%
+  step_other(ward, threshold = 0.01) %>% 
+  step_other(zip_code, threshold = 0.01) %>% 
+  step_unknown(all_nominal_predictors()) %>%
+  step_dummy(all_nominal_predictors())
+  
+sale_wflow <- 
+  workflow() %>%
+  add_model(linear_model_sales) %>% 
+  add_recipe(sale_price_recipe)
+
+# Fit the model
+rf_fit_sales <- fit(sale_wflow, train_sales)
+
+rf_fit_sales %>% tidy() %>% view()
+
+sales_2019 <- 
+  test_sales %>% 
+  filter(sale_date == 2019)
+
+sale_price_predictions <- 
+  augment(rf_fit_sales, sales_2019)
+
+sale_price_predictions
+
+```
+
+
+```{r mape-mpse-analysis}
+
+yardstick::mape(sale_price_predictions,
+     truth = sale_price,
+     estimate = .pred)
+
+
+yardstick::rmse(sale_price_predictions,
+     truth = sale_price,
+     estimate = .pred)
+
 ```
