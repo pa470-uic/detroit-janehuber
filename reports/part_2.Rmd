@@ -11,10 +11,21 @@ output:
 editor_options: 
   chunk_output_type: console
 ---
-Questions to ask in class:
 
-1. Can we go over classification tables 8.3 and 8.4 from the textbook and the classification probability metric ROC curves? Specifically, the metric ROC curves.
-2. 
+Jane To-Do:
+1. Conclude Part B by making the tables from the textbook, 8.3 and 8.4
+Evaluation:
+8.3 is false positive/false negative/true positive/true negative.
+8.4 gives an analysis of the significance of all of these things.
+
+30 minutes.
+
+
+2. Part C. Max 2 hours.
+
+3. Grab plots from first part of this assignment, add in limited commentary. Max 1 hour here.
+
+
 
 
 
@@ -136,25 +147,28 @@ sales_assessments_parcels %>%
   filter(sale_date == 2016,
          assessment_year == 2016) %>% 
   mutate(overassessed = as_factor(if_else(sale_price < (assessed_value * 2),
-                                1,
-                                0)))
+                                "YES",
+                                "NO")))
 
 split <- rsample::initial_split(overassessed)
 
 train <- training(split)
 test <- testing(split)
 
-#add in neighborhood!
+
+# Wanted to use a random forest here, but couldn't figure out the best way to visualize
+# Would love to discuss in class further.
+
+# rand_forest_model <- 
+# rand_forest(trees = 1000, min_n = 5) %>% 
+#   set_engine("ranger", verbose = TRUE) %>% 
+#   set_mode("classification") %>%
+#   translate()
+
 log_model <- 
   logistic_reg() %>%
   set_engine('glm') %>%
   set_mode('classification')
-
-
-# tree_model <-
-#   parsnip::decision_tree(tree_depth=5) %>%
-#   set_engine("rpart") %>%
-#   set_mode('regression')
 
 overassessed_recipe <- 
   recipe(overassessed ~ sale_price + ward + zip_code,
@@ -164,19 +178,55 @@ overassessed_recipe <-
   step_unknown(all_nominal_predictors()) %>%
   step_dummy(all_nominal_predictors())
   
-log_wflow <- 
+wflow <- 
   workflow() %>%
   add_model(log_model) %>% 
   add_recipe(overassessed_recipe)
 
-#Evaluate this
-log_fit <- fit(log_wflow, overassessed)
 
+#Evaluate model
+rf_fit <- fit(wflow, overassessed)
 
-#Evaluate according to the charts
+# rf_fit %>% tidy() %>% view()
+
+homes_2016 <- 
+  train %>% 
+  filter(sale_date == 2016)
+
+overassessment_predictions <- 
+  augment(rf_fit, homes_2016)
+
 
 ```
 
+Our model, it turns out, is relatively effective at determining whether or not a property will be overassesed. You can see that the Positive Predictive Value (PPV) is 83%.
+
+
+```{r evaluate-overassessments}
+
+overassment_evaluation <- 
+  left_join(overassessment_predictions, overassessed) %>% 
+  group_by(overassessed) %>% 
+  summarize(predicted_not_overassessed = sum(.pred_class == "NO"),
+            predicted_overassessed = sum(.pred_class == "YES"))
+
+overassment_evaluation
+
+
+
+
+```
+
+Furthermore, an ROC curve further demonstrates how effective our model is at determining whether a property is likely to be overassessed.
+
+```{r roc-curve}
+
+roc_curve <- yardstick::roc_curve(data = overassessment_predictions, truth = overassessed, .pred_NO)
+
+
+# roc_curve
+autoplot(roc_curve)
+```
 
 Need to do a yardstick evaluation at the bottom of this work:
 ```{r}
