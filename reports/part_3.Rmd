@@ -24,11 +24,13 @@ Part B TODO:
 (x) Need to create a second predictor. (maybe "Sale price per square foot for neighborhood")
 (x) Create a table for my results of the model, compare the two models... Need a format for this.
 (x) Follow this for my second model (sale price model).
-() Set up comparison between first and second sale price model.
+(x) Set up comparison between first and second sale price model.
 () BONUS: Instead of printing the tibble, use Kable to display the results.
 
 Part C TODO: 
-() Simple out-of-sample prediction. We got data from 2016; so now we should try and predict for other years. Second model was 2019... Do we have any later years I can check (2020 for sale price???)
+(x) out-of-sample for overassessment in 2016
+(x) out-of-sample for sales in 2019
+() BONUS: commentary on these models, what we can learn, maybe a graph/comparison
 
 Part D TODO:
 () Leaflet map by census tract for model A: https://juliasilge.com/blog/using-tidycensus/
@@ -512,7 +514,12 @@ This model is worse;
 sales_predictions_with_additional_dataset <- 
   left_join(full_dataset, additional_predictor_variables)
 
-split_sales_model_2 <- rsample::initial_split(sales_predictions_with_additional_dataset)
+sales_predictions_with_additional_dataset_2019 <- 
+  sales_predictions_with_additional_dataset %>% 
+  filter(sale_date == 2019)
+
+split_sales_model_2 <- 
+  rsample::initial_split(sales_predictions_with_additional_dataset_2019)
 
 train_sales_2 <- training(split_sales_model_2)
 test_sales_2 <- testing(split_sales_model_2)
@@ -534,13 +541,13 @@ sale_wflow <-
 rf_fit_sales_model_2 <- fit(sale_wflow, train_sales_2)
 
 #rf_fit_sales_model_2 %>% tidy() %>% view()
-
-sales_2019_model_2 <- 
-  test_sales_2 %>% 
-  filter(sale_date == 2019)
+# 
+# sales_2019_model_2 <- 
+#   test_sales_2 %>% 
+#   filter(sale_date == 2019)
 
 sale_price_predictions <- 
-  augment(rf_fit_sales_model_2, sales_2019_model_2)
+  augment(rf_fit_sales_model_2, test_sales_2)
 
 #Now, compare initial model with this model
 
@@ -594,8 +601,14 @@ overassment_evaluation_model_2
 
 ```{r sales-estimate-out-of-sample-predictions}
 
+sales_dataset_out_of_sample <- 
+  sales_predictions_with_additional_dataset %>% 
+  filter(sale_date != 2019) 
 
+rf_fit_sales_model_2_out_of_sample <- fit(sale_wflow, sales_dataset_out_of_sample)
 
+sale_price_predictions <- 
+  augment(rf_fit_sales_model_2_out_of_sample, sales_dataset_out_of_sample)
 
 
 ```
