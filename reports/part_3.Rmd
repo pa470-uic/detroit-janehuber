@@ -33,6 +33,7 @@ Part C TODO:
 () BONUS: commentary on these models, what we can learn, maybe a graph/comparison
 
 Part D TODO:
+() Data prep to get census tract for XY variables
 () Leaflet map by census tract for model A: https://juliasilge.com/blog/using-tidycensus/
 () Model B maybe needs something like this: https://www.tmwr.org/explain.html#software-for-model-explanations
 
@@ -43,9 +44,12 @@ library(cmfproperty)
 library(purrr)
 library(gridExtra)
 library(ggplot2)
-library(readxl)
+#library(readxl)
 library(tidymodels)
 library(glmnet)
+library(leaflet)
+library(sf)
+library(simplevis)
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE, verbose = FALSE)
 
 theme_set(theme_bw())
@@ -540,12 +544,6 @@ sale_wflow <-
 # Fit the model
 rf_fit_sales_model_2 <- fit(sale_wflow, train_sales_2)
 
-#rf_fit_sales_model_2 %>% tidy() %>% view()
-# 
-# sales_2019_model_2 <- 
-#   test_sales_2 %>% 
-#   filter(sale_date == 2019)
-
 sale_price_predictions <- 
   augment(rf_fit_sales_model_2, test_sales_2)
 
@@ -621,10 +619,81 @@ sale_price_predictions <-
 ### Correlation Plot
 
 ### Leaflet Map
+```{r leaflet-map-for-overassemssment}
+
+sale_price_predictions_census_tract <- 
+  sale_price_predictions %>% 
+  filter(!is.na(X),
+         !is.na(Y)) %>% 
+  sf::st_as_sf(coords = c('X', 'Y'), crs = 4326) %>%
+    sf::st_join(
+    tidycensus::get_acs("tract",
+                        variables = c(pop = "B01001_001"),
+                        state = "MI",
+                        county = "Wayne",
+                        output = "wide",
+                        geometry = T) %>%
+      select(GEOID) %>% 
+  sf::st_transform(crs = 4326))
+  
+sale_preds_grouped_census <- 
+  sale_price_predictions_census_tract %>% 
+  group_by(GEOID) %>% 
+  summarise(average_predictions = mean(.pred, rm.na=TRUE),
+            geometry = st_combine(geometry)) 
+
+
+# Seeing if I need to convert this multipolygon into a polygon
+# %>% 
+#   mutate(geometry = sf_)
+
+
+# Here, create leaflet map:
+
+bins <- c(0, 10, 20, 50, 100, 200, 500, 1000, Inf)
+pal <- colorBin("YlOrRd", domain = sale_preds_grouped_census$average_predictions)
+
+#doesn't work
+leaf_sf_col(sale_preds_grouped_census$geometry, sale_preds_grouped_census$average_predictions,
+     col_method = "bin", 
+     col_cuts = c(0, 10, 50, 100, 150, 200, Inf))
+
+#Doesn't work
+map <- 
+leaflet() %>% 
+  addProviderTiles(providers$OpenStreetMap) %>% 
+  addPolygons(data = sale_preds_grouped_census)
+
+#Doesn't work
+base_map <- 
+  sale_preds_grouped_census %>% 
+  leaflet(geometric_points) %>%
+  addProviderTiles(provider = "CartoDB.Positron") %>% 
+  addPolygons(
+      map=geometry,
+      fillColor = ~pal(average_predictions),
+                stroke = FALSE,
+                smoothFactor = 0,
+                fillOpacity = 0.7) %>%
+    addLegend("bottomright", 
+              pal = pal, 
+              values = ~ average_predictions,
+              title = "Average predicted sale price",
+              opacity = 1)
+
+base_map
+
+```
 
 ## Sales Prediction Model
 
 ### Factors Identified By Model
 
+```{r sales-prediction-factors}
 
+
+
+
+
+```
 
