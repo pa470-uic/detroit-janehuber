@@ -11,6 +11,15 @@ output:
     number_sections: true
 ---
 
+Part A TODO (max 30 minutes on Sunday):
+() Sentences for both of my models in part 1
+() Remove the bad tables for the second model (metric/estimator/estimate)
+() Update the grid with the two graphs to be vertical
+() Tidy up all of the sentences. 
+
+Part B TODO:
+()
+
 ```{r setup, include=FALSE}
 library(tidyverse)
 library(lubridate)
@@ -147,6 +156,7 @@ attributes_clean <-
 rm(attributes)
 gc()
 
+
 # Combine sales and assessments
 sales_and_assessments <- 
   left_join(sales_clean, assessments_clean) %>% 
@@ -163,12 +173,35 @@ sales_assessments_parcels <-
 rm(list='sales_and_assessments', 'parcels_clean')
 gc()
 
-#Finally create full dataset
 
-full_dataset <- 
+sales_assessments_parcels_attributes <- 
   left_join(sales_assessments_parcels, attributes_clean)
 
 rm(list='sales_assessments_parcels', 'attributes_clean')
+gc()
+  
+#Foreclosures
+foreclosures <- dplyr::tbl(con, 'foreclosures') %>% dplyr::collect()
+foreclosures_clean <- 
+  foreclosures %>% 
+  rename(address = prop_addr,
+         parcel_num = prop_parcelnum) %>% 
+  select(c(address, parcel_num, years_for_evaluation)) %>% 
+  pivot_longer(cols = years_for_evaluation,
+               names_to = "foreclosure_year",
+               values_to = "foreclosed",
+               values_drop_na = TRUE) %>% 
+  select(parcel_num, foreclosed)
+
+rm(foreclosures)
+gc()
+
+#Finally create full dataset
+
+full_dataset <- 
+  left_join(sales_assessments_parcels_attributes, foreclosures_clean)
+
+rm(list='sales_assessments_parcels_attributes', 'foreclosures_clean')
 gc()
 
 #Final cleanup--remove initial tibbles from SQLite now that we've filtered for the data we actually want
@@ -210,7 +243,7 @@ invisible(gc())
 
 Let's construct a model to determine whether or not a home was overassessed in 2016. We will use logistic regression to help us predict whether something will be "overassessed" or "underassessed". In Detroit, homes are assessed at 50% value--meaning that if a home was sold for \$100,000, it would be assessed for $50,000.  
 
-```{r classify-home-as-overassessed, include=TRUE}
+```{r first-model-overassessment, include=TRUE}
 
 # Get data filtered
 overassessed <- 
@@ -231,7 +264,7 @@ log_model <-
   set_engine('glm') %>%
   set_mode('classification')
 
-overassessed_recipe <- 
+overassessed_first_recipe <- 
   recipe(overassessed ~ sale_price + ward + zip_code,
       data = train) %>%
   step_other(ward, threshold = 0.01) %>% 
@@ -239,25 +272,63 @@ overassessed_recipe <-
   step_unknown(all_nominal_predictors()) %>%
   step_dummy(all_nominal_predictors())
   
-wflow <- 
+overassessed_workflow <- 
   workflow() %>%
   add_model(log_model) %>% 
-  add_recipe(overassessed_recipe)
+  add_recipe(overassessed_first_recipe)
 
 
 #Evaluate model
-rf_fit <- fit(wflow, overassessed)
+rf_fit <- fit(overassessed_workflow, overassessed)
 
 homes_2016 <- 
-  train %>% 
+  test %>% 
   filter(sale_date == 2016)
 
 overassessment_predictions <- 
   augment(rf_fit, homes_2016)
 
+rm(list='rf_fit', 'homes_2016')
+
+overassment_evaluation <- 
+  left_join(overassessment_predictions, overassessed) %>% 
+  group_by(overassessed) %>% 
+  summarize(predicted_not_overassessed = sum(.pred_class == "NO"),
+            predicted_overassessed = sum(.pred_class == "YES"))
+
+overassment_evaluation
+
+
+# Create a classifier metrics table to help us further evaluate our model.
+
+true_negative <- overassment_evaluation$predicted_not_overassessed[1]
+false_negative <- overassment_evaluation$predicted_not_overassessed[2]
+false_positive <- overassment_evaluation$predicted_overassessed[1]
+true_positive <- overassment_evaluation$predicted_overassessed[2]
+
+true_positive_rate <- true_positive / (true_positive + false_negative)
+true_negative_rate <- true_negative / (true_negative + false_positive)
+false_positive_rate <- false_positive /(false_positive + true_negative)
+false_negative_rate <- false_negative / (false_negative + true_positive)
+positive_predictive_value <- true_positive / (true_positive + false_positive)
+
+classifier_metrics_table <- tibble(measurement = c("true positive rate", 
+                                                   "true negative rate",
+                                                   "false positive rate",
+                                                   "false positive rate",
+                                                   "positive predictive value"), 
+                                   value = c(true_positive_rate, 
+                                               true_negative_rate,
+                                               false_positive_rate,
+                                               false_negative_rate,
+                                               positive_predictive_value))
+
+classifier_metrics_table
+
+
 ```
 
-```{r sale-predictions-2019}
+```{r first-model-sales-predictions}
 
 split_sales <- rsample::initial_split(full_dataset)
 
@@ -314,4 +385,93 @@ yardstick::rmse(sale_price_predictions,
 ```
 
 # Part B
+
+```{r second-model-overassessment-and-comparison}
+
+neighborhood_foreclosure_percentage <- 
+  full_dataset %>% 
+  filter(!is.na(zip_code)) %>% 
+  group_by(zip_code) %>% 
+  summarise(percent_zip_foreclosures = sum(foreclosed, na.rm=TRUE)/n())
+
+overassessed_with_additional_field <- 
+  left_join(overassessed, neighborhood_foreclosure_percentage)
+
+split_2 <- rsample::initial_split(overassessed_with_additional_field)
+
+train_model_2 <- training(split)
+test_model_2 <- testing(split)
+
+# Add new field here 
+overassessed_second_recipe <- 
+  recipe(overassessed ~ percent_zip_foreclosures + sale_price + zip_code,
+      data = train_model_2) %>%
+  step_other(ward, threshold = 0.01) %>% 
+  step_other(zip_code, threshold = 0.01) %>% 
+  step_unknown(all_nominal_predictors()) %>%
+  step_dummy(all_nominal_predictors())
+
+
+#use old workflow with model, just remove old recipe and add new one
+overassessed_workflow <- 
+  overassessed_workflow %>% 
+  remove_recipe(overassessed_first_recipe) %>% 
+  add_recipe(overassessed_second_recipe)
+
+rf_fit_model_2 <- 
+  fit(overassessed_workflow, overassessed_with_additional_field)
+
+homes_2016_model2 <- 
+  test_model_2 %>% 
+  filter(sale_date == 2016)
+
+overassessment_predictions_model_2 <- 
+  augment(rf_fit_model_2, homes_2016_model2)
+
+
+overassment_evaluation <- 
+  left_join(overassessment_predictions_model_2, overassessed) %>% 
+  group_by(overassessed) %>% 
+  summarize(predicted_not_overassessed = sum(.pred_class == "NO"),
+            predicted_overassessed = sum(.pred_class == "YES"))
+
+overassment_evaluation_model_2
+
+
+# Create a classifier metrics table to help us further evaluate our model.
+
+true_negative <- overassment_evaluation_model_2$predicted_not_overassessed[1]
+false_negative <- overassment_evaluation_model_2$predicted_not_overassessed[2]
+false_positive <- overassment_evaluation_model_2$predicted_overassessed[1]
+true_positive <- overassment_evaluation_model_2$predicted_overassessed[2]
+
+true_positive_rate <- true_positive / (true_positive + false_negative)
+true_negative_rate <- true_negative / (true_negative + false_positive)
+false_positive_rate <- false_positive /(false_positive + true_negative)
+false_negative_rate <- false_negative / (false_negative + true_positive)
+positive_predictive_value <- true_positive / (true_positive + false_positive)
+
+classifier_metrics_table <- tibble(measurement = c("true positive rate", 
+                                                   "true negative rate",
+                                                   "false positive rate",
+                                                   "false positive rate",
+                                                   "positive predictive value"), 
+                                   value = c(true_positive_rate, 
+                                               true_negative_rate,
+                                               false_positive_rate,
+                                               false_negative_rate,
+                                               positive_predictive_value))
+
+classifier_metrics_table
+
+rm(list='true_negative', 'false_negative', 'false_positive', 'true_positive',
+   'true_positive_rate',
+   'true_negative_rate',
+   'false_positive_rate',
+   'false_negative_rate',
+   'positive_predictive_value')
+gc()
+
+
+```
 
