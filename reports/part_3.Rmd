@@ -10,10 +10,11 @@ output:
     theme: sandstone
     number_sections: true
 ---
+Data Setup TODO:
+(x) Add in latitude and longitude so that we have this info for later
+() Get the census tract data integrated.
 
-Data Setup: Add in latitude and longitude so that we have this info for later
-
-Part A TODO (max 30 minutes on Sunday):
+Part A TODO (max 30 minutes on Sunday--4 pm!):
 () Sentences for both of my models in part 1
 () Remove the bad tables for the second model (metric/estimator/estimate)
 () Update the grid with the two graphs to be vertical
@@ -22,7 +23,8 @@ Part A TODO (max 30 minutes on Sunday):
 Part B TODO:
 (x) Need to create a second predictor. (maybe "Sale price per square foot for neighborhood")
 (x) Create a table for my results of the model, compare the two models... Need a format for this.
-() Follow this for my second model (sale price model).
+(x) Follow this for my second model (sale price model).
+() Set up comparison between first and second sale price model.
 () BONUS: Instead of printing the tibble, use Kable to display the results.
 
 Part C TODO: 
@@ -224,7 +226,7 @@ gc()
 ```
 
 
-# Part A
+# Introduction (Part A)
 
 Homes in Detroit have suffered from poorly assessed home values, which has contributed greatly to foreclosure during a time of economic instability. The UC Irvine Law Review's ["Taxed Out: Illegal Property Tax Assessments and the Epidemic of Tax Foreclosures in Detroit"](https://scholarship.law.uci.edu/ucilr/vol9/iss4/3/) analyzes  the relationship between over-assessing a home and its role in driving foreclosures, exposing government's role in creating conditions for people to lose their homes. The Harris School of Public Policy at the University of Chicago's The Center For Municipal Finance produced the report ["An Evaluation of Residential Property Tax Assessments in the City of Detroit, 2016-2018"](https://harris.uchicago.edu/files/evalrespropertytaxasdetroit20162018.pdf) shows how the city of Detroit attempted to correct that mistake, reducing the number of assessments higher than sales, but that it's still too high.
 
@@ -277,7 +279,7 @@ log_model <-
   set_mode('classification')
 
 overassessed_first_recipe <- 
-  recipe(overassessed ~ sale_price + ward + zip_code + total_square_footage,
+  recipe(overassessed ~ ward + sale_price + zip_code + total_square_footage,
       data = train) %>%
   step_other(ward, threshold = 0.01) %>% 
   step_other(zip_code, threshold = 0.01) %>% 
@@ -352,7 +354,7 @@ linear_model_sales <-
   set_engine("lm") 
 
 sale_price_recipe <- 
-  recipe(sale_price ~ ward + zip_code + assessed_value,
+  recipe(sale_price ~ ward + sale_price + zip_code + total_square_footage + assessed_value,
       data = train_sales) %>%
   step_other(ward, threshold = 0.01) %>% 
   step_other(zip_code, threshold = 0.01) %>% 
@@ -382,17 +384,24 @@ Now that we have run the model, we will use MAPE as a first evaluation.
 ```{r mape-analysis}
 
 #I don't understand why I'm getting an Infinite value here...
-yardstick::mape(sale_price_predictions,
-     truth = sale_price,
-     estimate = .pred)
+# yardstick::mape(sale_price_predictions,
+#      truth = sale_price,
+#      estimate = .pred)
 ```
 
 Next, we will use RMSE to further evaluate the model.
 
 ```{r rmse-analysis}
-yardstick::rmse(sale_price_predictions,
-     truth = sale_price,
-     estimate = .pred)
+first_prediction <- 
+  yardstick::rmse(sale_price_predictions,
+       truth = sale_price,
+       estimate = .pred)
+
+first_prediction_estimate <- 
+  first_prediction$.estimate[1]
+  
+rm(first_prediction)
+invisible(gc())
 
 ```
 
@@ -400,7 +409,7 @@ yardstick::rmse(sale_price_predictions,
 
 ```{r second-model-overassessment-and-comparison}
 
-neighborhood_foreclosure_percentage <- 
+additional_predictor_variables <- 
   full_dataset %>% 
   filter(!is.na(zip_code)) %>% 
   group_by(zip_code) %>% 
@@ -408,7 +417,7 @@ neighborhood_foreclosure_percentage <-
             avg_sale_price_zip = mean(sale_price, na.rm=TRUE))
 
 overassessed_with_additional_field <- 
-  left_join(overassessed, neighborhood_foreclosure_percentage)
+  left_join(overassessed, additional_predictor_variables)
 
 split_2 <- rsample::initial_split(overassessed_with_additional_field)
 
@@ -417,7 +426,7 @@ test_model_2 <- testing(split_2)
 
 # Add new field here 
 overassessed_second_recipe <- 
-  recipe(overassessed ~ percent_zip_foreclosures + avg_sale_price_zip + ward + sale_price + zip_code + total_square_footage,
+  recipe(overassessed ~ ward + sale_price + zip_code + total_square_footage + percent_zip_foreclosures + avg_sale_price_zip,
       data = train_model_2) %>%
   step_other(ward, threshold = 0.01) %>% 
   step_other(zip_code, threshold = 0.01) %>% 
@@ -495,4 +504,59 @@ comparison_data_first_and_second_model
 ```
 This model is better, but not by much.
 
+```{r second-model-sales-predictions}
+
+sales_predictions_with_additional_dataset <- 
+  left_join(full_dataset, additional_predictor_variables)
+
+split_sales_model_2 <- rsample::initial_split(sales_predictions_with_additional_dataset)
+
+train_sales_2 <- training(split_sales_model_2)
+test_sales_2 <- testing(split_sales_model_2)
+
+
+sale_price_recipe_model_2 <- 
+  recipe(sale_price ~ ward + sale_price + zip_code + assessed_value + percent_zip_foreclosures + avg_sale_price_zip,
+      data = train_sales_2) %>%
+  step_other(ward, threshold = 0.01) %>% 
+  step_other(zip_code, threshold = 0.01) %>% 
+  step_unknown(all_nominal_predictors()) %>%
+  step_dummy(all_nominal_predictors())
+  
+sale_wflow <- 
+  sale_wflow %>% 
+  update_recipe(sale_price_recipe_model_2)
+
+# Fit the model
+rf_fit_sales_model_2 <- fit(sale_wflow, train_sales_2)
+
+#rf_fit_sales_model_2 %>% tidy() %>% view()
+
+sales_2019_model_2 <- 
+  test_sales_2 %>% 
+  filter(sale_date == 2019)
+
+sale_price_predictions <- 
+  augment(rf_fit_sales_model_2, sales_2019_model_2)
+
+#Now, compare initial model with this model
+
+second_prediction <- 
+  yardstick::rmse(sale_price_predictions,
+       truth = sale_price,
+       estimate = .pred)
+
+second_prediction_estimate <- 
+  second_prediction$.estimate[1]
+
+
+all_predictions <- 
+  tibble(first_RMSE = first_prediction_estimate,
+         second_RMSE = second_prediction_estimate)
+  
+all_predictions
+
+```
+
+Second model is improved.
 
