@@ -18,7 +18,16 @@ Part A TODO (max 30 minutes on Sunday):
 () Tidy up all of the sentences. 
 
 Part B TODO:
-()
+() Create a table for my results of the model, compare the two models... Need a format for this.
+() Need to create a second predictor. (maybe "Sale price per square foot for neighborhood")
+() Follow this for my second model (sale price model).
+
+Part C TODO: 
+() Simple out-of-sample prediction. We got data from 2016; so now we should try and predict for other years. Second model was 2019... Do we have any later years I can check (2020 for sale price???)
+
+Part D TODO:
+() Leaflet map by census tract for model A: https://juliasilge.com/blog/using-tidycensus/
+() Model B maybe needs something like this: https://www.tmwr.org/explain.html#software-for-model-explanations
 
 ```{r setup, include=FALSE}
 library(tidyverse)
