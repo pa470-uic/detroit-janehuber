@@ -403,7 +403,8 @@ neighborhood_foreclosure_percentage <-
   full_dataset %>% 
   filter(!is.na(zip_code)) %>% 
   group_by(zip_code) %>% 
-  summarise(percent_zip_foreclosures = sum(foreclosed, na.rm=TRUE)/n())
+  summarise(percent_zip_foreclosures = sum(foreclosed, na.rm=TRUE)/n(),
+            avg_sale_price_zip = mean(sale_price, na.rm=TRUE))
 
 overassessed_with_additional_field <- 
   left_join(overassessed, neighborhood_foreclosure_percentage)
@@ -415,7 +416,7 @@ test_model_2 <- testing(split_2)
 
 # Add new field here 
 overassessed_second_recipe <- 
-  recipe(overassessed ~ percent_zip_foreclosures + ward + sale_price + zip_code + total_square_footage,
+  recipe(overassessed ~ percent_zip_foreclosures + avg_sale_price_zip + ward + sale_price + zip_code + total_square_footage,
       data = train_model_2) %>%
   step_other(ward, threshold = 0.01) %>% 
   step_other(zip_code, threshold = 0.01) %>% 
@@ -484,6 +485,6 @@ gc()
 
 
 ```
-This model is better.
+This model is better, but not by much.
 
 
