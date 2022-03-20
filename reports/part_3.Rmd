@@ -21,28 +21,297 @@ library(ggplot2)
 library(readxl)
 library(tidymodels)
 library(glmnet)
-knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE, verbose = FALSE)
 
 theme_set(theme_bw())
 ```
 
-```{r download-data, include=FALSE}
+```{r download-data-and-clean, include=FALSE}
+
+
+custom_theme <- theme_bw() +
+  theme(plot.title = element_text(size = 9),
+        axis.title.x = element_text(size = 9),
+        axis.title.y = element_text(size = 9))
+
+# property_classifications <- read_xlsx("files/OFFICE OF THE ASSESSORS_PROPERTY CLASSIFICATIONS -rev.xlsx")
+
+years_for_evaluation <- c('2016', '2017', '2018', '2019')
 
 con <- DBI::dbConnect(RSQLite::SQLite(), "../database/detroit.sqlite")
 
 # convert to tibble
 sales <- dplyr::tbl(con, 'sales') %>% dplyr::collect()
+
+#remove factor for sale date
+sales_clean <- 
+  sales %>% 
+  select(c(parcel_num, sale_date, sale_price, sale_terms, property_c)) %>% 
+  rename(c(prop_class = property_c)) %>% 
+  mutate(sale_date = format(as.Date(sale_date), format="%Y"),
+         sale_terms = str_replace_all(sale_terms, "Not Arms Length", "NOT ARMS LENGTH"),
+         sale_terms = str_replace_all(sale_terms, "not arms length", "NOT ARMS LENGTH"),
+         sale_terms = str_replace_all(sale_terms, "valid arms length", "VALID ARMS LENGTH"),
+         sale_terms = str_replace_all(sale_terms, "Valid Arms Length", "VALID ARMS LENGTH"),
+         sale_terms = str_replace_all(sale_terms, "bank sale used", "BANK SALE USED"),
+         sale_terms = str_replace_all(sale_terms, "00-NOT AUDITED", "NOT AUDITED"),
+         prop_class = as_factor(prop_class), 
+         sale_terms = as_factor(sale_terms)) %>% 
+  filter(sale_terms == "VALID ARMS LENGTH",
+         sale_date %in% years_for_evaluation,
+         prop_class == '401')
+
+rm(sales)
+gc()
+
+# Assessments
 assessments <- dplyr::tbl(con, 'assessments') %>% dplyr::collect()
-foreclosures <- dplyr::tbl(con, 'foreclosures') %>% dplyr::collect()
+
+assessments_clean <-
+  assessments %>%
+  rename(c(parcel_num = PARCELNO,
+           assessed_value = ASSESSEDVALUE,
+           taxable_value = TAXABLEVALUE,
+           assessment_year = year,
+           prop_class = propclass)) %>% 
+  mutate(prop_class = as_factor(prop_class)) %>% 
+  filter(assessed_value > 2000)
+
+rm(assessments)
+gc()
+
+# Parcels: Create a parcels tibble that combines historic with all. Can filter down later if needed.
 parcels <- dplyr::tbl(con, 'parcels') %>% dplyr::collect()
+
+parcels_current_clean <-
+  parcels %>%
+  rename(parcel_num = parcel_number) %>%
+  mutate(zip_code = as.numeric(zip_code),
+         property_class = as.factor(property_class))
+
+rm(parcels)
+gc()
+
 parcels_historic <- dplyr::tbl(con, 'parcels_historic') %>% dplyr::collect()
+
+parcels_historic_clean <-
+  parcels_historic %>%
+  rename(parcel_num = PARCELNO,
+         address = PROPADDR,
+         zip_code = ZIPCODE,
+         taxpayer_1 = TAXPAYER1,
+         taxpayer_street = TAXPADDR,
+         taxpayer_city = TAXPCITY,
+         taxpayer_state = TAXPSTATE,
+         taxpayer_zip = TAXPZIP,
+         property_class = propclass,
+         tax_status = TAXSTATUS,
+         total_square_footage = TOTALSQFT,
+         total_acreage = TOTALACREAGE,
+         frontage = FRONTAGE,
+         homestead_pre = PRE,
+         sale_price = SALEPRICE,
+         sale_date = SALEDATE,
+         assessed_value = ASSESSEDVALUE,
+         taxable_value = TAXABLEVALUE) %>%
+  mutate(zip_code = as.numeric(zip_code),
+         property_class = as.factor(property_class)) %>% 
+  filter(!is.na(total_square_footage))
+
+rm(parcels_historic)
+gc()
+
+parcels_clean <-
+  left_join(parcels_current_clean, parcels_historic_clean) %>% 
+  select(c(ward, parcel_num, council_district, zip_code, total_square_footage)) %>% 
+  mutate(zip_code = as.numeric(zip_code))
+
+rm(list='parcels_current_clean', 'parcels_historic_clean')
+gc()
+
+#Attributes
 attributes <- dplyr::tbl(con, 'attributes') %>% dplyr::collect()
+attributes_clean <- 
+  attributes %>% 
+  rename(neighborhood = Neighborhood,
+         total_square_footage = total_squa,
+         assessed_value = assessed_v,
+         taxable_value = taxable_va,
+         sale_price = 'Sale Price',
+         sale_date = 'SALE_YEAR',
+         total_floors = total_floo,
+         prop_class = property_c) %>% 
+  select(!c(st_num, st_name, taxpayer_1, use_code_d, homestead_, 'Sale Date', heightcat, Longitude, Latitude))  %>% 
+  mutate(prop_class = as_factor(prop_class))
 
-# custom_theme <- theme_bw() +
-#   theme(plot.title = element_text(size = 9),
-#         axis.title.x = element_text(size = 9), 
-#         axis.title.y = element_text(size = 9))
+rm(attributes)
+gc()
 
-# property_classifications <- read_xlsx("files/OFFICE OF THE ASSESSORS_PROPERTY CLASSIFICATIONS -rev.xlsx")
+# Combine sales and assessments
+sales_and_assessments <- 
+  left_join(sales_clean, assessments_clean) %>% 
+  filter(!is.na(sale_date)) %>% 
+  mutate(sale_date = as.numeric(sale_date))
+
+rm(list='sales_clean', 'assessments_clean')
+gc()
+
+#Combine sales, assessments, parcels
+sales_assessments_parcels <- 
+  left_join(sales_and_assessments, parcels_clean) 
+
+rm(list='sales_and_assessments', 'parcels_clean')
+gc()
+
+#Finally create full dataset
+
+full_dataset <- 
+  left_join(sales_assessments_parcels, attributes_clean)
+
+rm(list='sales_assessments_parcels', 'attributes_clean')
+gc()
+
+#Final cleanup--remove initial tibbles from SQLite now that we've filtered for the data we actually want
+
+rm(list = 'con', 'years_for_evaluation')
+gc()
+
 ```
+
+
+# Part A
+
+Homes in Detroit have suffered from poorly assessed home values, which has contributed greatly to foreclosure during a time of economic instability. The UC Irvine Law Review's ["Taxed Out: Illegal Property Tax Assessments and the Epidemic of Tax Foreclosures in Detroit"](https://scholarship.law.uci.edu/ucilr/vol9/iss4/3/) analyzes  the relationship between over-assessing a home and its role in driving foreclosures, exposing government's role in creating conditions for people to lose their homes. The Harris School of Public Policy at the University of Chicago's The Center For Municipal Finance produced the report ["An Evaluation of Residential Property Tax Assessments in the City of Detroit, 2016-2018"](https://harris.uchicago.edu/files/evalrespropertytaxasdetroit20162018.pdf) shows how the city of Detroit attempted to correct that mistake, reducing the number of assessments higher than sales, but that it's still too high.
+
+Detroit’s assessment values across percentile home values appear to have remained steady in dollars since 2016, even as home assessments increased over time. It is important to note, however, that the red line (homes at the 25th percentile of sale price) have the smallest gap between their assessed value and their sale price. This helps us to see the way in which inequality has been exacerbated by assessing homes at a much closer value to their sale price than for more expensive homes.
+
+```{r cmfproperty-sales-ratio, message = FALSE, warning = FALSE, echo = FALSE, verbose = FALSE}
+ratios <-
+  cmfproperty::reformat_data(
+    data = full_dataset,
+    sale_col = "sale_price",
+    assessment_col = "assessed_value",
+    sale_year_col = "sale_date",
+  )
+
+stats <- cmfproperty::calc_iaao_stats(ratios)
+
+output <- diagnostic_plots(stats,
+                           ratios,
+                           min_reporting_yr = 2016,
+                           max_reporting_yr = 2019)
+
+grid.arrange(output[[3]], output[[2]], ncol = 2)
+
+rm(list = 'stats', 'ratio', 'output')
+invisible(gc())
+
+```
+
+Let's construct a model to determine whether or not a home was overassessed in 2016. We will use logistic regression to help us predict whether something will be "overassessed" or "underassessed". In Detroit, homes are assessed at 50% value--meaning that if a home was sold for \$100,000, it would be assessed for $50,000.  
+
+```{r classify-home-as-overassessed, include=TRUE}
+
+# Get data filtered
+overassessed <- 
+full_dataset %>% 
+  filter(sale_date == 2016,
+         assessment_year == 2016) %>% 
+  mutate(overassessed = as_factor(if_else(sale_price < (assessed_value * 2),
+                                "YES",
+                                "NO")))
+
+split <- rsample::initial_split(overassessed)
+
+train <- training(split)
+test <- testing(split)
+
+log_model <- 
+  logistic_reg() %>%
+  set_engine('glm') %>%
+  set_mode('classification')
+
+overassessed_recipe <- 
+  recipe(overassessed ~ sale_price + ward + zip_code,
+      data = train) %>%
+  step_other(ward, threshold = 0.01) %>% 
+  step_other(zip_code, threshold = 0.01) %>% 
+  step_unknown(all_nominal_predictors()) %>%
+  step_dummy(all_nominal_predictors())
+  
+wflow <- 
+  workflow() %>%
+  add_model(log_model) %>% 
+  add_recipe(overassessed_recipe)
+
+
+#Evaluate model
+rf_fit <- fit(wflow, overassessed)
+
+homes_2016 <- 
+  train %>% 
+  filter(sale_date == 2016)
+
+overassessment_predictions <- 
+  augment(rf_fit, homes_2016)
+
+```
+
+```{r sale-predictions-2019}
+
+split_sales <- rsample::initial_split(full_dataset)
+
+train_sales <- training(split_sales)
+test_sales <- testing(split_sales)
+
+linear_model_sales <- 
+  linear_reg() %>% 
+  set_engine("lm") 
+
+sale_price_recipe <- 
+  recipe(sale_price ~ ward + zip_code + assessed_value,
+      data = train_sales) %>%
+  step_other(ward, threshold = 0.01) %>% 
+  step_other(zip_code, threshold = 0.01) %>% 
+  step_unknown(all_nominal_predictors()) %>%
+  step_dummy(all_nominal_predictors())
+  
+sale_wflow <- 
+  workflow() %>%
+  add_model(linear_model_sales) %>% 
+  add_recipe(sale_price_recipe)
+
+# Fit the model
+rf_fit_sales <- fit(sale_wflow, train_sales)
+
+rf_fit_sales %>% tidy() %>% view()
+
+sales_2019 <- 
+  test_sales %>% 
+  filter(sale_date == 2019)
+
+sale_price_predictions <- 
+  augment(rf_fit_sales, sales_2019)
+
+```
+
+Now that we have run the model, we will use MAPE as a first evaluation.
+```{r mape-analysis}
+
+#I don't understand why I'm getting an Infinite value here...
+yardstick::mape(sale_price_predictions,
+     truth = sale_price,
+     estimate = .pred)
+```
+
+Next, we will use RMSE to further evaluate the model.
+
+```{r rmse-analysis}
+yardstick::rmse(sale_price_predictions,
+     truth = sale_price,
+     estimate = .pred)
+
+```
+
+# Part B
 
