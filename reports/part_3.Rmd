@@ -265,7 +265,7 @@ log_model <-
   set_mode('classification')
 
 overassessed_first_recipe <- 
-  recipe(overassessed ~ sale_price + ward + zip_code,
+  recipe(overassessed ~ sale_price + ward + zip_code + total_square_footage,
       data = train) %>%
   step_other(ward, threshold = 0.01) %>% 
   step_other(zip_code, threshold = 0.01) %>% 
@@ -293,8 +293,8 @@ rm(list='rf_fit', 'homes_2016')
 overassment_evaluation <- 
   left_join(overassessment_predictions, overassessed) %>% 
   group_by(overassessed) %>% 
-  summarize(predicted_not_overassessed = sum(.pred_class == "NO"),
-            predicted_overassessed = sum(.pred_class == "YES"))
+  summarize(predicted_not_overassessed = sum(.pred_class == "NO", na.rm=TRUE),
+            predicted_overassessed = sum(.pred_class == "YES", na.rm = TRUE))
 
 overassment_evaluation
 
@@ -315,7 +315,7 @@ positive_predictive_value <- true_positive / (true_positive + false_positive)
 classifier_metrics_table <- tibble(measurement = c("true positive rate", 
                                                    "true negative rate",
                                                    "false positive rate",
-                                                   "false positive rate",
+                                                   "false negative rate",
                                                    "positive predictive value"), 
                                    value = c(true_positive_rate, 
                                                true_negative_rate,
@@ -399,12 +399,12 @@ overassessed_with_additional_field <-
 
 split_2 <- rsample::initial_split(overassessed_with_additional_field)
 
-train_model_2 <- training(split)
-test_model_2 <- testing(split)
+train_model_2 <- training(split_2)
+test_model_2 <- testing(split_2)
 
 # Add new field here 
 overassessed_second_recipe <- 
-  recipe(overassessed ~ percent_zip_foreclosures + sale_price + zip_code,
+  recipe(overassessed ~ percent_zip_foreclosures + ward + sale_price + zip_code + total_square_footage,
       data = train_model_2) %>%
   step_other(ward, threshold = 0.01) %>% 
   step_other(zip_code, threshold = 0.01) %>% 
@@ -415,8 +415,7 @@ overassessed_second_recipe <-
 #use old workflow with model, just remove old recipe and add new one
 overassessed_workflow <- 
   overassessed_workflow %>% 
-  remove_recipe(overassessed_first_recipe) %>% 
-  add_recipe(overassessed_second_recipe)
+  update_recipe(overassessed_second_recipe)
 
 rf_fit_model_2 <- 
   fit(overassessed_workflow, overassessed_with_additional_field)
@@ -429,11 +428,11 @@ overassessment_predictions_model_2 <-
   augment(rf_fit_model_2, homes_2016_model2)
 
 
-overassment_evaluation <- 
+overassment_evaluation_model_2 <- 
   left_join(overassessment_predictions_model_2, overassessed) %>% 
   group_by(overassessed) %>% 
-  summarize(predicted_not_overassessed = sum(.pred_class == "NO"),
-            predicted_overassessed = sum(.pred_class == "YES"))
+  summarize(predicted_not_overassessed = sum(.pred_class == "NO", na.rm=TRUE),
+            predicted_overassessed = sum(.pred_class == "YES", na.rm = TRUE))
 
 overassment_evaluation_model_2
 
@@ -454,7 +453,7 @@ positive_predictive_value <- true_positive / (true_positive + false_positive)
 classifier_metrics_table <- tibble(measurement = c("true positive rate", 
                                                    "true negative rate",
                                                    "false positive rate",
-                                                   "false positive rate",
+                                                   "false negative rate",
                                                    "positive predictive value"), 
                                    value = c(true_positive_rate, 
                                                true_negative_rate,
@@ -474,4 +473,6 @@ gc()
 
 
 ```
+This model is better.
+
 
