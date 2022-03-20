@@ -405,7 +405,7 @@ invisible(gc())
 
 ```
 
-# Part B
+# Additional Predictors Impact On Models (Part B)
 
 ```{r second-model-overassessment-and-comparison}
 
@@ -560,3 +560,11 @@ all_predictions
 
 Second model is improved.
 
+
+
+# Out Of Sample Predictions (Part C)
+
+```{r}
+
+
+```
