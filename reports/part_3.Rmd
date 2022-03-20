@@ -85,7 +85,7 @@ sales_clean <-
          prop_class == '401')
 
 rm(sales)
-gc()
+invisible(gc())
 
 # Assessments
 assessments <- dplyr::tbl(con, 'assessments') %>% dplyr::collect()
@@ -101,7 +101,7 @@ assessments_clean <-
   filter(assessed_value > 2000)
 
 rm(assessments)
-gc()
+invisible(gc())
 
 # Parcels: Create a parcels tibble that combines historic with all. Can filter down later if needed.
 parcels <- dplyr::tbl(con, 'parcels') %>% dplyr::collect()
@@ -113,7 +113,7 @@ parcels_current_clean <-
          property_class = as.factor(property_class))
 
 rm(parcels)
-gc()
+invisible(gc())
 
 parcels_historic <- dplyr::tbl(con, 'parcels_historic') %>% dplyr::collect()
 
@@ -142,7 +142,7 @@ parcels_historic_clean <-
   filter(!is.na(total_square_footage))
 
 rm(parcels_historic)
-gc()
+invisible(gc())
 
 parcels_clean <-
   left_join(parcels_current_clean, parcels_historic_clean) %>% 
@@ -150,7 +150,7 @@ parcels_clean <-
   mutate(zip_code = as.numeric(zip_code))
 
 rm(list='parcels_current_clean', 'parcels_historic_clean')
-gc()
+invisible(gc())
 
 #Attributes
 attributes <- dplyr::tbl(con, 'attributes') %>% dplyr::collect()
@@ -168,7 +168,7 @@ attributes_clean <-
   mutate(prop_class = as_factor(prop_class))
 
 rm(attributes)
-gc()
+invisible(gc())
 
 
 # Combine sales and assessments
@@ -178,21 +178,21 @@ sales_and_assessments <-
   mutate(sale_date = as.numeric(sale_date))
 
 rm(list='sales_clean', 'assessments_clean')
-gc()
+invisible(gc())
 
 #Combine sales, assessments, parcels
 sales_assessments_parcels <- 
   left_join(sales_and_assessments, parcels_clean) 
 
 rm(list='sales_and_assessments', 'parcels_clean')
-gc()
+invisible(gc())
 
 
 sales_assessments_parcels_attributes <- 
   left_join(sales_assessments_parcels, attributes_clean)
 
 rm(list='sales_assessments_parcels', 'attributes_clean')
-gc()
+invisible(gc())
   
 #Foreclosures
 foreclosures <- dplyr::tbl(con, 'foreclosures') %>% dplyr::collect()
@@ -208,7 +208,7 @@ foreclosures_clean <-
   select(parcel_num, foreclosed)
 
 rm(foreclosures)
-gc()
+invisible(gc())
 
 #Finally create full dataset
 
@@ -216,12 +216,12 @@ full_dataset <-
   left_join(sales_assessments_parcels_attributes, foreclosures_clean)
 
 rm(list='sales_assessments_parcels_attributes', 'foreclosures_clean')
-gc()
+invisible(gc())
 
 #Final cleanup--remove initial tibbles from SQLite now that we've filtered for the data we actually want
 
 rm(list = 'con', 'years_for_evaluation')
-gc()
+invisible(gc())
 
 ```
 
@@ -262,13 +262,16 @@ Let's construct a model to determine whether or not a home was overassessed in 2
 # Get data filtered
 overassessed <- 
 full_dataset %>% 
-  filter(sale_date == 2016,
-         assessment_year == 2016) %>% 
   mutate(overassessed = as_factor(if_else(sale_price < (assessed_value * 2),
                                 "YES",
                                 "NO")))
 
-split <- rsample::initial_split(overassessed)
+overassessed_2016_sales <- 
+  overassessed %>% 
+    filter(sale_date == 2016,
+         assessment_year == 2016) 
+
+split <- rsample::initial_split(overassessed_2016_sales)
 
 train <- training(split)
 test <- testing(split)
@@ -293,7 +296,7 @@ overassessed_workflow <-
 
 
 #Evaluate model
-rf_fit <- fit(overassessed_workflow, overassessed)
+rf_fit <- fit(overassessed_workflow, overassessed_2016_sales)
 
 homes_2016 <- 
   test %>% 
@@ -305,7 +308,7 @@ overassessment_predictions <-
 rm(list='rf_fit', 'homes_2016')
 
 overassment_evaluation <- 
-  left_join(overassessment_predictions, overassessed) %>% 
+  left_join(overassessment_predictions, overassessed_2016_sales) %>% 
   group_by(overassessed) %>% 
   summarize(predicted_not_overassessed = sum(.pred_class == "NO", na.rm=TRUE),
             predicted_overassessed = sum(.pred_class == "YES", na.rm = TRUE))
@@ -417,7 +420,7 @@ additional_predictor_variables <-
             avg_sale_price_zip = mean(sale_price, na.rm=TRUE))
 
 overassessed_with_additional_field <- 
-  left_join(overassessed, additional_predictor_variables)
+  left_join(overassessed_2016_sales, additional_predictor_variables) %>% 
 
 split_2 <- rsample::initial_split(overassessed_with_additional_field)
 
@@ -491,7 +494,7 @@ rm(list='true_negative', 'false_negative', 'false_positive', 'true_positive',
    'false_positive_rate',
    'false_negative_rate',
    'positive_predictive_value')
-gc()
+invisible(gc())
 
 
 # Table Comparing Initial Model and New Model
@@ -502,7 +505,7 @@ comparison_data_first_and_second_model <-
 comparison_data_first_and_second_model
 
 ```
-This model is better, but not by much.
+This model is worse; 
 
 ```{r second-model-sales-predictions}
 
@@ -558,13 +561,57 @@ all_predictions
 
 ```
 
-Second model is improved.
+Second model is improved; still a high RMSE.
 
 
 
 # Out Of Sample Predictions (Part C)
 
-```{r}
+## Overassessments: Applying 2016 model to homes that did not sell
+```{r overassessment-out-of-sample-prediction}
+
+# Take my second model here, and apply predictions to 
+homes_2016_model2_no_sell <- 
+  left_join(overassessed, additional_predictor_variables) %>% 
+    filter(sale_date != 2016) 
+
+overassessment_predictions_model_2 <- 
+  augment(rf_fit_model_2, homes_2016_model2_no_sell)
+
+
+overassment_evaluation_model_2 <- 
+  overassessment_predictions_model_2 %>% 
+  group_by(overassessed) %>% 
+  summarize(predicted_not_overassessed = sum(.pred_class == "NO", na.rm=TRUE),
+            predicted_overassessed = sum(.pred_class == "YES", na.rm = TRUE))
+
+overassment_evaluation_model_2
 
 
 ```
+
+## Sales Predictions: Applying 2019 model to homes that did not sell
+
+```{r sales-estimate-out-of-sample-predictions}
+
+
+
+
+
+```
+
+
+# Model Explanation (Part D)
+
+## Overassessment Model
+
+### Correlation Plot
+
+### Leaflet Map
+
+## Sales Prediction Model
+
+### Factors Identified By Model
+
+
+
