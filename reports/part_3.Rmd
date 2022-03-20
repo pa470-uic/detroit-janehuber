@@ -2,29 +2,47 @@
 title: "Part 3"
 author: "Jane Huber"
 date: "3/3/2022"
-output: html_document
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    df_print: paged
+    theme: sandstone
+    number_sections: true
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(lubridate)
+library(cmfproperty)
+library(purrr)
+library(gridExtra)
+library(ggplot2)
+library(readxl)
+library(tidymodels)
+library(glmnet)
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+theme_set(theme_bw())
 ```
 
-## R Markdown
+```{r download-data, include=FALSE}
 
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+con <- DBI::dbConnect(RSQLite::SQLite(), "../database/detroit.sqlite")
 
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+# convert to tibble
+sales <- dplyr::tbl(con, 'sales') %>% dplyr::collect()
+assessments <- dplyr::tbl(con, 'assessments') %>% dplyr::collect()
+foreclosures <- dplyr::tbl(con, 'foreclosures') %>% dplyr::collect()
+parcels <- dplyr::tbl(con, 'parcels') %>% dplyr::collect()
+parcels_historic <- dplyr::tbl(con, 'parcels_historic') %>% dplyr::collect()
+attributes <- dplyr::tbl(con, 'attributes') %>% dplyr::collect()
 
-```{r cars}
-summary(cars)
+# custom_theme <- theme_bw() +
+#   theme(plot.title = element_text(size = 9),
+#         axis.title.x = element_text(size = 9), 
+#         axis.title.y = element_text(size = 9))
+
+# property_classifications <- read_xlsx("files/OFFICE OF THE ASSESSORS_PROPERTY CLASSIFICATIONS -rev.xlsx")
 ```
 
-## Including Plots
-
-You can also embed plots, for example:
-
-```{r pressure, echo=FALSE}
-plot(pressure)
-```
-
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
