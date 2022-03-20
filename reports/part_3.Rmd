@@ -10,9 +10,6 @@ output:
     theme: sandstone
     number_sections: true
 ---
-Data Setup TODO:
-(x) Add in latitude and longitude so that we have this info for later
-() Get the census tract data integrated.
 
 Part A TODO (max 30 minutes on Sunday--4 pm!):
 () Sentences for both of my models in part 1
@@ -21,19 +18,13 @@ Part A TODO (max 30 minutes on Sunday--4 pm!):
 () Tidy up all of the sentences. 
 
 Part B TODO:
-(x) Need to create a second predictor. (maybe "Sale price per square foot for neighborhood")
-(x) Create a table for my results of the model, compare the two models... Need a format for this.
-(x) Follow this for my second model (sale price model).
-(x) Set up comparison between first and second sale price model.
 () BONUS: Instead of printing the tibble, use Kable to display the results.
 
 Part C TODO: 
-(x) out-of-sample for overassessment in 2016
-(x) out-of-sample for sales in 2019
 () BONUS: commentary on these models, what we can learn, maybe a graph/comparison
 
 Part D TODO:
-() Data prep to get census tract for XY variables
+() Data prep to get census tract for XY variables--just need to convert into a polygon
 () Leaflet map by census tract for model A: https://juliasilge.com/blog/using-tidycensus/
 () Model B maybe needs something like this: https://www.tmwr.org/explain.html#software-for-model-explanations
 
@@ -44,7 +35,6 @@ library(cmfproperty)
 library(purrr)
 library(gridExtra)
 library(ggplot2)
-#library(readxl)
 library(tidymodels)
 library(glmnet)
 library(leaflet)
@@ -236,8 +226,6 @@ invisible(gc())
 
 Homes in Detroit have suffered from poorly assessed home values, which has contributed greatly to foreclosure during a time of economic instability. The UC Irvine Law Review's ["Taxed Out: Illegal Property Tax Assessments and the Epidemic of Tax Foreclosures in Detroit"](https://scholarship.law.uci.edu/ucilr/vol9/iss4/3/) analyzes  the relationship between over-assessing a home and its role in driving foreclosures, exposing government's role in creating conditions for people to lose their homes. The Harris School of Public Policy at the University of Chicago's The Center For Municipal Finance produced the report ["An Evaluation of Residential Property Tax Assessments in the City of Detroit, 2016-2018"](https://harris.uchicago.edu/files/evalrespropertytaxasdetroit20162018.pdf) shows how the city of Detroit attempted to correct that mistake, reducing the number of assessments higher than sales, but that it's still too high.
 
-Detroit’s assessment values across percentile home values appear to have remained steady in dollars since 2016, even as home assessments increased over time. It is important to note, however, that the red line (homes at the 25th percentile of sale price) have the smallest gap between their assessed value and their sale price. This helps us to see the way in which inequality has been exacerbated by assessing homes at a much closer value to their sale price than for more expensive homes.
-
 ```{r cmfproperty-sales-ratio, message = FALSE, warning = FALSE, echo = FALSE, verbose = FALSE}
 ratios <-
   cmfproperty::reformat_data(
@@ -254,14 +242,21 @@ output <- diagnostic_plots(stats,
                            min_reporting_yr = 2016,
                            max_reporting_yr = 2019)
 
-grid.arrange(output[[3]], output[[2]], ncol = 2)
+grid.arrange(output[[3]], output[[2]], ncol = 1)
 
 rm(list = 'stats', 'ratio', 'output')
 invisible(gc())
 
 ```
 
-Let's construct a model to determine whether or not a home was overassessed in 2016. We will use logistic regression to help us predict whether something will be "overassessed" or "underassessed". In Detroit, homes are assessed at 50% value--meaning that if a home was sold for \$100,000, it would be assessed for $50,000.  
+
+Detroit’s assessment values across percentile home values appear to have remained steady in dollars since 2016, even as home assessments increased over time. It is important to note, however, that the red line (homes at the 25th percentile of sale price) have the smallest gap between their assessed value and their sale price. This helps us to see the way in which inequality has been exacerbated by assessing homes at a much closer value to their sale price than for more expensive homes.
+
+
+
+# Additional Predictors Impact On Models (Part B)
+
+When evaluating over-assessments for homes in Detroit, using 2016 as a year to generate a model predicting the likelihood of over-assessments, we test a base model that evaluates the impact of ward, sale price, zip code, and  the total square footage of a home. Then, we compare the results by adding in more nuanced predictors, such as the percent of home foreclosures in a zip code and the average sale price of a home in the zip code. Interestingly, adding in these more nuanced variables made a less effective model; this may suggest that the initial model slightly overfit or that there is an interaction here that we do not understand.
 
 ```{r first-model-overassessment, include=TRUE}
 
@@ -346,75 +341,8 @@ classifier_metrics_table <- tibble(measurement = c("true positive rate",
                                                false_negative_rate,
                                                positive_predictive_value))
 
-classifier_metrics_table
-
-
 ```
 
-```{r first-model-sales-predictions}
-
-split_sales <- rsample::initial_split(full_dataset)
-
-train_sales <- training(split_sales)
-test_sales <- testing(split_sales)
-
-linear_model_sales <- 
-  linear_reg() %>% 
-  set_engine("lm") 
-
-sale_price_recipe <- 
-  recipe(sale_price ~ ward + sale_price + zip_code + total_square_footage + assessed_value,
-      data = train_sales) %>%
-  step_other(ward, threshold = 0.01) %>% 
-  step_other(zip_code, threshold = 0.01) %>% 
-  step_unknown(all_nominal_predictors()) %>%
-  step_dummy(all_nominal_predictors())
-  
-sale_wflow <- 
-  workflow() %>%
-  add_model(linear_model_sales) %>% 
-  add_recipe(sale_price_recipe)
-
-# Fit the model
-rf_fit_sales <- fit(sale_wflow, train_sales)
-
-rf_fit_sales %>% tidy() %>% view()
-
-sales_2019 <- 
-  test_sales %>% 
-  filter(sale_date == 2019)
-
-sale_price_predictions <- 
-  augment(rf_fit_sales, sales_2019)
-
-```
-
-Now that we have run the model, we will use MAPE as a first evaluation.
-```{r mape-analysis}
-
-#I don't understand why I'm getting an Infinite value here...
-# yardstick::mape(sale_price_predictions,
-#      truth = sale_price,
-#      estimate = .pred)
-```
-
-Next, we will use RMSE to further evaluate the model.
-
-```{r rmse-analysis}
-first_prediction <- 
-  yardstick::rmse(sale_price_predictions,
-       truth = sale_price,
-       estimate = .pred)
-
-first_prediction_estimate <- 
-  first_prediction$.estimate[1]
-  
-rm(first_prediction)
-invisible(gc())
-
-```
-
-# Additional Predictors Impact On Models (Part B)
 
 ```{r second-model-overassessment-and-comparison}
 
@@ -426,7 +354,7 @@ additional_predictor_variables <-
             avg_sale_price_zip = mean(sale_price, na.rm=TRUE))
 
 overassessed_with_additional_field <- 
-  left_join(overassessed_2016_sales, additional_predictor_variables) %>% 
+  left_join(overassessed_2016_sales, additional_predictor_variables)
 
 split_2 <- rsample::initial_split(overassessed_with_additional_field)
 
@@ -511,7 +439,61 @@ comparison_data_first_and_second_model <-
 comparison_data_first_and_second_model
 
 ```
-This model is worse; 
+
+Stepping into the shoes of the assessor in Detroit, we also develop a model to predict sale prices of homes in Detroit, which could be used to inform assessments. By evaluating and testing on sales in the city of Detroit in 2019, we can train our model based on sales and see if we are able to effectively predict sale prices for other homes in Detroit. We follow our strategy for over-assessments, generating a base model that looks at ward, zip code, total square footage, and assessed_value. We then augment this model with the percent of home foreclosures in a zip code and the average sale price of a home in the zip code to see if it improves our model. Unlike the over-assessments, this helped to improve our model.
+
+
+```{r first-model-sales-predictions}
+
+split_sales <- rsample::initial_split(full_dataset)
+
+train_sales <- training(split_sales)
+test_sales <- testing(split_sales)
+
+linear_model_sales <- 
+  linear_reg() %>% 
+  set_engine("lm") 
+
+sale_price_recipe <- 
+  recipe(sale_price ~ ward + zip_code + total_square_footage + assessed_value,
+      data = train_sales) %>%
+  step_other(ward, threshold = 0.01) %>% 
+  step_other(zip_code, threshold = 0.01) %>% 
+  step_unknown(all_nominal_predictors()) %>%
+  step_dummy(all_nominal_predictors())
+  
+sale_wflow <- 
+  workflow() %>%
+  add_model(linear_model_sales) %>% 
+  add_recipe(sale_price_recipe)
+
+# Fit the model
+rf_fit_sales <- fit(sale_wflow, train_sales)
+
+rf_fit_sales %>% tidy() %>% view()
+
+sales_2019 <- 
+  test_sales %>% 
+  filter(sale_date == 2019)
+
+sale_price_predictions <- 
+  augment(rf_fit_sales, sales_2019)
+
+```
+
+```{r rmse-analysis}
+first_prediction <- 
+  yardstick::rmse(sale_price_predictions,
+       truth = sale_price,
+       estimate = .pred)
+
+first_prediction_estimate <- 
+  first_prediction$.estimate[1]
+  
+rm(first_prediction)
+invisible(gc())
+
+```
 
 ```{r second-model-sales-predictions}
 
@@ -621,8 +603,8 @@ sale_price_predictions <-
 ### Leaflet Map
 ```{r leaflet-map-for-overassemssment}
 
-sale_price_predictions_census_tract <- 
-  sale_price_predictions %>% 
+overassessment_predictions_census_tract <- 
+  overassessment_predictions_model_2 %>% 
   filter(!is.na(X),
          !is.na(Y)) %>% 
   sf::st_as_sf(coords = c('X', 'Y'), crs = 4326) %>%
@@ -635,53 +617,89 @@ sale_price_predictions_census_tract <-
                         geometry = T) %>%
       select(GEOID) %>% 
   sf::st_transform(crs = 4326))
-  
+
+#Can I get the most common pred class per GEOID?
 sale_preds_grouped_census <- 
-  sale_price_predictions_census_tract %>% 
+  overassessment_predictions_census_tract %>% 
+  ount(GEOID, overassessed, .pred_class)  %>% 
   group_by(GEOID) %>% 
-  summarise(average_predictions = mean(.pred, rm.na=TRUE),
-            geometry = st_combine(geometry)) 
+  summarise(average_predictions = ),
+            geometry = st_combine(geometry)) %>% 
+  left_join(
+    tigris::tracts(state = "MI",
+                   county = "Wayne",
+                   cb = T) %>%
+      select(GEOID),
+    by = "GEOID"
+  ) %>% 
+  sf::st_as_sf()
+
+# Unable to convert this geometry class into a polygon class, which I could use for the leaflet
 
 
-# Seeing if I need to convert this multipolygon into a polygon
-# %>% 
-#   mutate(geometry = sf_)
+tpr_sf <- 
+  overassessment_predictions_census_tract %>%
+  select(GEOID, overassessed, .pred_class) %>%
+  group_by(GEOID) %>%
+  summarize(tpr = (n / sum(n, rm.na=TRUE)), rm.na=TRUE) %>%
+  left_join(
+    tigris::tracts(state = "MI",
+                   county = "Wayne",
+                   cb = T) %>%
+      select(GEOID),
+    by = "GEOID"
+  ) 
+
+# %>%
+#   ungroup() %>%
+#   sf::st_as_sf()
+
+pal <- colorQuantile("YlOrRd", domain = tpr_sf$tpr)
+leaflet(tpr_sf) %>%
+  addPolygons(fillColor = ~pal(tpr),
+              color = "white",
+              weight = 2) %>%
+  addProviderTiles("CartoDB.Positron")
+
+
+
+
 
 
 # Here, create leaflet map:
 
-bins <- c(0, 10, 20, 50, 100, 200, 500, 1000, Inf)
-pal <- colorBin("YlOrRd", domain = sale_preds_grouped_census$average_predictions)
+# bins <- c(0, 10, 20, 50, 100, 200, 500, 1000, Inf)
+# pal <- colorBin("YlOrRd", domain = sale_preds_grouped_census$average_predictions)
 
 #doesn't work
-leaf_sf_col(sale_preds_grouped_census$geometry, sale_preds_grouped_census$average_predictions,
-     col_method = "bin", 
-     col_cuts = c(0, 10, 50, 100, 150, 200, Inf))
+# leaf_sf_col(sale_preds_grouped_census$geometry, sale_preds_grouped_census$average_predictions,
+#      col_method = "bin", 
+#      col_cuts = c(0, 10, 50, 100, 150, 200, Inf))
 
 #Doesn't work
-map <- 
-leaflet() %>% 
-  addProviderTiles(providers$OpenStreetMap) %>% 
-  addPolygons(data = sale_preds_grouped_census)
+# map <- 
+# leaflet() %>% 
+#   addProviderTiles(providers$OpenStreetMap) %>% 
+#   addPolygons(data = sale_preds_grouped_census)
 
 #Doesn't work
-base_map <- 
-  sale_preds_grouped_census %>% 
-  leaflet(geometric_points) %>%
-  addProviderTiles(provider = "CartoDB.Positron") %>% 
-  addPolygons(
-      map=geometry,
-      fillColor = ~pal(average_predictions),
-                stroke = FALSE,
-                smoothFactor = 0,
-                fillOpacity = 0.7) %>%
-    addLegend("bottomright", 
-              pal = pal, 
-              values = ~ average_predictions,
-              title = "Average predicted sale price",
-              opacity = 1)
-
-base_map
+# base_map <- 
+#   sale_preds_grouped_census %>% 
+#   leaflet(geometric_points) %>%
+#   addProviderTiles(provider = "CartoDB.Positron") %>% 
+#   addPolygons(
+#       map=geometry,
+#       fillColor = ~pal(average_predictions),
+#                 stroke = FALSE,
+#                 smoothFactor = 0,
+#                 fillOpacity = 0.7) %>%
+#     addLegend("bottomright", 
+#               pal = pal, 
+#               values = ~ average_predictions,
+#               title = "Average predicted sale price",
+#               opacity = 1)
+# 
+# base_map
 
 ```
 
