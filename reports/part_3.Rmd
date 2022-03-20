@@ -11,6 +11,8 @@ output:
     number_sections: true
 ---
 
+Data Setup: Add in latitude and longitude so that we have this info for later
+
 Part A TODO (max 30 minutes on Sunday):
 () Sentences for both of my models in part 1
 () Remove the bad tables for the second model (metric/estimator/estimate)
@@ -18,8 +20,8 @@ Part A TODO (max 30 minutes on Sunday):
 () Tidy up all of the sentences. 
 
 Part B TODO:
-() Create a table for my results of the model, compare the two models... Need a format for this.
 () Need to create a second predictor. (maybe "Sale price per square foot for neighborhood")
+() Create a table for my results of the model, compare the two models... Need a format for this.
 () Follow this for my second model (sale price model).
 
 Part C TODO: 
@@ -141,7 +143,7 @@ gc()
 
 parcels_clean <-
   left_join(parcels_current_clean, parcels_historic_clean) %>% 
-  select(c(ward, parcel_num, council_district, zip_code, total_square_footage)) %>% 
+  select(c(ward, parcel_num, council_district, zip_code, total_square_footage, X, Y)) %>% 
   mutate(zip_code = as.numeric(zip_code))
 
 rm(list='parcels_current_clean', 'parcels_historic_clean')
