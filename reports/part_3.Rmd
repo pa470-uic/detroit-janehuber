@@ -20,9 +20,10 @@ Part A TODO (max 30 minutes on Sunday):
 () Tidy up all of the sentences. 
 
 Part B TODO:
-() Need to create a second predictor. (maybe "Sale price per square foot for neighborhood")
-() Create a table for my results of the model, compare the two models... Need a format for this.
+(x) Need to create a second predictor. (maybe "Sale price per square foot for neighborhood")
+(x) Create a table for my results of the model, compare the two models... Need a format for this.
 () Follow this for my second model (sale price model).
+() BONUS: Instead of printing the tibble, use Kable to display the results.
 
 Part C TODO: 
 () Simple out-of-sample prediction. We got data from 2016; so now we should try and predict for other years. Second model was 2019... Do we have any later years I can check (2020 for sale price???)
@@ -328,7 +329,7 @@ classifier_metrics_table <- tibble(measurement = c("true positive rate",
                                                    "false positive rate",
                                                    "false negative rate",
                                                    "positive predictive value"), 
-                                   value = c(true_positive_rate, 
+                                   initial_model = c(true_positive_rate, 
                                                true_negative_rate,
                                                false_positive_rate,
                                                false_negative_rate,
@@ -462,18 +463,18 @@ false_positive_rate <- false_positive /(false_positive + true_negative)
 false_negative_rate <- false_negative / (false_negative + true_positive)
 positive_predictive_value <- true_positive / (true_positive + false_positive)
 
-classifier_metrics_table <- tibble(measurement = c("true positive rate", 
+classifier_metrics_table_second <- tibble(measurement = c("true positive rate", 
                                                    "true negative rate",
                                                    "false positive rate",
                                                    "false negative rate",
                                                    "positive predictive value"), 
-                                   value = c(true_positive_rate, 
+                                   with_additional_values = c(true_positive_rate, 
                                                true_negative_rate,
                                                false_positive_rate,
                                                false_negative_rate,
                                                positive_predictive_value))
 
-classifier_metrics_table
+#classifier_metrics_table_second
 
 rm(list='true_negative', 'false_negative', 'false_positive', 'true_positive',
    'true_positive_rate',
@@ -483,6 +484,13 @@ rm(list='true_negative', 'false_negative', 'false_positive', 'true_positive',
    'positive_predictive_value')
 gc()
 
+
+# Table Comparing Initial Model and New Model
+
+comparison_data_first_and_second_model <- 
+  left_join(classifier_metrics_table, classifier_metrics_table_second)
+
+comparison_data_first_and_second_model
 
 ```
 This model is better, but not by much.
