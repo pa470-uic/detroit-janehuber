@@ -11,23 +11,6 @@ output:
     number_sections: true
 ---
 
-Part A TODO (max 30 minutes on Sunday--4 pm!):
-() Sentences for both of my models in part 1
-() Remove the bad tables for the second model (metric/estimator/estimate)
-() Update the grid with the two graphs to be vertical
-() Tidy up all of the sentences. 
-
-Part B TODO:
-() BONUS: Instead of printing the tibble, use Kable to display the results.
-
-Part C TODO: 
-() BONUS: commentary on these models, what we can learn, maybe a graph/comparison
-
-Part D TODO:
-() Data prep to get census tract for XY variables--just need to convert into a polygon
-() Leaflet map by census tract for model A: https://juliasilge.com/blog/using-tidycensus/
-() Model B maybe needs something like this: https://www.tmwr.org/explain.html#software-for-model-explanations
-
 ```{r setup, include=FALSE}
 library(tidyverse)
 library(lubridate)
@@ -228,12 +211,13 @@ Homes in Detroit have suffered from poorly assessed home values, which has contr
 
 ```{r cmfproperty-sales-ratio, message = FALSE, warning = FALSE, echo = FALSE, verbose = FALSE}
 ratios <-
+  invisible(
   cmfproperty::reformat_data(
     data = full_dataset,
     sale_col = "sale_price",
     assessment_col = "assessed_value",
     sale_year_col = "sale_date",
-  )
+  ))
 
 stats <- cmfproperty::calc_iaao_stats(ratios)
 
@@ -314,9 +298,6 @@ overassment_evaluation <-
   summarize(predicted_not_overassessed = sum(.pred_class == "NO", na.rm=TRUE),
             predicted_overassessed = sum(.pred_class == "YES", na.rm = TRUE))
 
-overassment_evaluation
-
-
 # Create a classifier metrics table to help us further evaluate our model.
 
 true_negative <- overassment_evaluation$predicted_not_overassessed[1]
@@ -392,9 +373,6 @@ overassment_evaluation_model_2 <-
   group_by(overassessed) %>% 
   summarize(predicted_not_overassessed = sum(.pred_class == "NO", na.rm=TRUE),
             predicted_overassessed = sum(.pred_class == "YES", na.rm = TRUE))
-
-overassment_evaluation_model_2
-
 
 # Create a classifier metrics table to help us further evaluate our model.
 
@@ -479,9 +457,6 @@ sales_2019 <-
 sale_price_predictions <- 
   augment(rf_fit_sales, sales_2019)
 
-```
-
-```{r rmse-analysis}
 first_prediction <- 
   yardstick::rmse(sale_price_predictions,
        truth = sale_price,
@@ -548,13 +523,15 @@ all_predictions
 
 ```
 
-Second model is improved; still a high RMSE.
-
+The additional variables improve our model's RMSE, but it is still relatively high and suggests we should continue to explore more  effective predictors.
 
 
 # Out Of Sample Predictions (Part C)
 
 ## Overassessments: Applying 2016 model to homes that did not sell
+
+Next, let's apply our over-assessment model to homes that were not sold in 2016, in an attempt to predict what homes would have been over-assessed in 2016 (i.e. we have no way to directly confirm whether our prediction is correct).
+
 ```{r overassessment-out-of-sample-prediction}
 
 # Take my second model here, and apply predictions to 
@@ -579,6 +556,8 @@ overassment_evaluation_model_2
 
 ## Sales Predictions: Applying 2019 model to homes that did not sell
 
+Similarly, let's explore how our sale price estimate would look in 2019 for homes that did not sell.
+
 ```{r sales-estimate-out-of-sample-predictions}
 
 sales_dataset_out_of_sample <- 
@@ -598,68 +577,66 @@ sale_price_predictions <-
 
 ## Overassessment Model
 
-### Correlation Plot
-
 ### Leaflet Map
 ```{r leaflet-map-for-overassemssment}
 
-overassessment_predictions_census_tract <- 
-  overassessment_predictions_model_2 %>% 
-  filter(!is.na(X),
-         !is.na(Y)) %>% 
-  sf::st_as_sf(coords = c('X', 'Y'), crs = 4326) %>%
-    sf::st_join(
-    tidycensus::get_acs("tract",
-                        variables = c(pop = "B01001_001"),
-                        state = "MI",
-                        county = "Wayne",
-                        output = "wide",
-                        geometry = T) %>%
-      select(GEOID) %>% 
-  sf::st_transform(crs = 4326))
+# overassessment_predictions_census_tract <- 
+#   overassessment_predictions_model_2 %>% 
+#   filter(!is.na(X),
+#          !is.na(Y)) %>% 
+#   sf::st_as_sf(coords = c('X', 'Y'), crs = 4326) %>%
+#     sf::st_join(
+#     tidycensus::get_acs("tract",
+#                         variables = c(pop = "B01001_001"),
+#                         state = "MI",
+#                         county = "Wayne",
+#                         output = "wide",
+#                         geometry = T) %>%
+#       select(GEOID) %>% 
+#   sf::st_transform(crs = 4326))
 
 #Can I get the most common pred class per GEOID?
-sale_preds_grouped_census <- 
-  overassessment_predictions_census_tract %>% 
-  ount(GEOID, overassessed, .pred_class)  %>% 
-  group_by(GEOID) %>% 
+sale_preds_grouped_census <-
+  overassessment_predictions_census_tract %>%
+  ount(GEOID, overassessed, .pred_class)  %>%
+  group_by(GEOID) %>%
   summarise(average_predictions = ),
-            geometry = st_combine(geometry)) %>% 
+            geometry = st_combine(geometry)) %>%
   left_join(
     tigris::tracts(state = "MI",
                    county = "Wayne",
                    cb = T) %>%
       select(GEOID),
     by = "GEOID"
-  ) %>% 
+  ) %>%
   sf::st_as_sf()
 
 # Unable to convert this geometry class into a polygon class, which I could use for the leaflet
 
 
-tpr_sf <- 
-  overassessment_predictions_census_tract %>%
-  select(GEOID, overassessed, .pred_class) %>%
-  group_by(GEOID) %>%
-  summarize(tpr = (n / sum(n, rm.na=TRUE)), rm.na=TRUE) %>%
-  left_join(
-    tigris::tracts(state = "MI",
-                   county = "Wayne",
-                   cb = T) %>%
-      select(GEOID),
-    by = "GEOID"
-  ) 
+# tpr_sf <- 
+#   overassessment_predictions_census_tract %>%
+#   select(GEOID, overassessed, .pred_class) %>%
+#   group_by(GEOID) %>%
+#   summarize(tpr = (n / sum(n, rm.na=TRUE)), rm.na=TRUE) %>%
+#   left_join(
+#     tigris::tracts(state = "MI",
+#                    county = "Wayne",
+#                    cb = T) %>%
+#       select(GEOID),
+#     by = "GEOID"
+#   ) 
 
 # %>%
 #   ungroup() %>%
 #   sf::st_as_sf()
 
-pal <- colorQuantile("YlOrRd", domain = tpr_sf$tpr)
-leaflet(tpr_sf) %>%
-  addPolygons(fillColor = ~pal(tpr),
-              color = "white",
-              weight = 2) %>%
-  addProviderTiles("CartoDB.Positron")
+# pal <- colorQuantile("YlOrRd", domain = tpr_sf$tpr)
+# leaflet(tpr_sf) %>%
+#   addPolygons(fillColor = ~pal(tpr),
+#               color = "white",
+#               weight = 2) %>%
+#   addProviderTiles("CartoDB.Positron")
 
 
 
