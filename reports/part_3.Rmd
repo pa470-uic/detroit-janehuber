@@ -209,7 +209,7 @@ invisible(gc())
 
 Homes in Detroit have suffered from poorly assessed home values, which has contributed greatly to foreclosure during a time of economic instability. The UC Irvine Law Review's ["Taxed Out: Illegal Property Tax Assessments and the Epidemic of Tax Foreclosures in Detroit"](https://scholarship.law.uci.edu/ucilr/vol9/iss4/3/) analyzes  the relationship between over-assessing a home and its role in driving foreclosures, exposing government's role in creating conditions for people to lose their homes. The Harris School of Public Policy at the University of Chicago's The Center For Municipal Finance produced the report ["An Evaluation of Residential Property Tax Assessments in the City of Detroit, 2016-2018"](https://harris.uchicago.edu/files/evalrespropertytaxasdetroit20162018.pdf) shows how the city of Detroit attempted to correct that mistake, reducing the number of assessments higher than sales, but that it's still too high.
 
-```{r cmfproperty-sales-ratio, message = FALSE, warning = FALSE, echo = FALSE, verbose = FALSE}
+```{r cmfproperty-sales-ratio, include=FALSE}
 ratios <-
   invisible(
   cmfproperty::reformat_data(
@@ -225,7 +225,9 @@ output <- diagnostic_plots(stats,
                            ratios,
                            min_reporting_yr = 2016,
                            max_reporting_yr = 2019)
+```
 
+```{r display-grid, message = FALSE, warning = FALSE, echo = FALSE, verbose = FALSE}
 grid.arrange(output[[3]], output[[2]], ncol = 1)
 
 rm(list = 'stats', 'ratio', 'output')
@@ -433,7 +435,7 @@ linear_model_sales <-
   set_engine("lm") 
 
 sale_price_recipe <- 
-  recipe(sale_price ~ ward + zip_code + total_square_footage + assessed_value,
+  recipe(sale_price ~ ward + zip_code + sale_price + total_square_footage + assessed_value,
       data = train_sales) %>%
   step_other(ward, threshold = 0.01) %>% 
   step_other(zip_code, threshold = 0.01) %>% 
@@ -578,38 +580,69 @@ sale_price_predictions <-
 ## Overassessment Model
 
 ### Leaflet Map
+
 ```{r leaflet-map-for-overassemssment}
 
-# overassessment_predictions_census_tract <- 
-#   overassessment_predictions_model_2 %>% 
-#   filter(!is.na(X),
-#          !is.na(Y)) %>% 
-#   sf::st_as_sf(coords = c('X', 'Y'), crs = 4326) %>%
-#     sf::st_join(
-#     tidycensus::get_acs("tract",
-#                         variables = c(pop = "B01001_001"),
-#                         state = "MI",
-#                         county = "Wayne",
-#                         output = "wide",
-#                         geometry = T) %>%
-#       select(GEOID) %>% 
-#   sf::st_transform(crs = 4326))
+# had lots of trouble getting a leaflet together. I'm not sure exactly where I went wrong--I've included a few of the experiments here--but i hope to continue working with this week.
 
-#Can I get the most common pred class per GEOID?
+
+
+# Step 1 here: combine my predictions model with the identifier of the census tract.
+# GEOID is what the tigris tract thing does...
+
+# census_tracts <- 
+#   tigris::tracts(state = "MI",
+#                    county = "Wayne",
+#                    cb = T)
+# 
+# 
+# overassessment_predictions_census_tract <-
+#   overassessment_predictions_model_2 %>%
+#   filter(!is.na(X),
+#          !is.na(Y)) %>%
+#   sf::st_as_sf(coords = c('X', 'Y'), crs = 4326) %>% 
+#   #can't id geometry at this point
+#   st_join(geometry,
+#     tigris::tracts(state = "MI",
+#                    county = "Wayne",
+#                    cb = T), within = TRUE)
+
+overassessment_predictions_census_tract <- 
+  overassessment_predictions_model_2 %>%
+  filter(!is.na(X),
+         !is.na(Y)) %>%
+  sf::st_as_sf(coords = c('X', 'Y'), crs = 4326) %>%
+    sf::st_join(
+    tidycensus::get_acs("tract",
+                        variables = c(pop = "B01001_001"),
+                        state = "MI",
+                        county = "Wayne",
+                        output = "wide",
+                        geometry = T) %>%
+      select(GEOID) %>%
+  sf::st_transform(crs = 4326))
+
+#Attempt to get the common pred class per GEOID?
 sale_preds_grouped_census <-
   overassessment_predictions_census_tract %>%
-  ount(GEOID, overassessed, .pred_class)  %>%
   group_by(GEOID) %>%
-  summarise(average_predictions = ),
-            geometry = st_combine(geometry)) %>%
-  left_join(
-    tigris::tracts(state = "MI",
-                   county = "Wayne",
-                   cb = T) %>%
-      select(GEOID),
-    by = "GEOID"
-  ) %>%
-  sf::st_as_sf()
+  summarise(prediction_class = as_factor(if_else(((sum(.pred_YES) / sum(.pred_NO)) >= 1), "YES", "NO")),
+             geometry = st_combine(geometry)) 
+
+# %>% 
+#   select(GEOID, avg_prediction)
+              
+      
+#If this ends up working, what I need to do next is a gruop_by in order to get the geometry for those points... THen, I don't have that multipoint drama.
+#%>%
+#   left_join(
+#     tigris::tracts(state = "MI",
+#                    county = "Wayne",
+#                    cb = T) %>%
+#       select(GEOID),
+#     by = "GEOID"
+#   ) %>%
+#   sf::st_as_sf()
 
 # Unable to convert this geometry class into a polygon class, which I could use for the leaflet
 

@@ -37,3 +37,4 @@ rsconnect/
 
 *.sqlite
 *.DS_Store
+*.zip
