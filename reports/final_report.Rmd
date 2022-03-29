@@ -1,0 +1,529 @@
+---
+title: "Final Report"
+author: "Jane Huber"
+date: "3/28/2022"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    df_print: paged
+    theme: sandstone
+    number_sections: true
+---
+
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(lubridate)
+library(cmfproperty)
+library(purrr)
+library(gridExtra)
+library(ggplot2)
+library(tidymodels)
+library(glmnet)
+library(leaflet)
+library(sf)
+library(simplevis)
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE, verbose = FALSE)
+
+theme_set(theme_bw())
+```
+
+```{r download-data-and-clean, include=FALSE}
+
+
+custom_theme <- theme_bw() +
+  theme(plot.title = element_text(size = 9),
+        axis.title.x = element_text(size = 9),
+        axis.title.y = element_text(size = 9))
+
+# property_classifications <- read_xlsx("files/OFFICE OF THE ASSESSORS_PROPERTY CLASSIFICATIONS -rev.xlsx")
+
+years_for_evaluation <- c('2016', '2017', '2018', '2019')
+
+con <- DBI::dbConnect(RSQLite::SQLite(), "../database/detroit.sqlite")
+
+# convert to tibble
+sales <- dplyr::tbl(con, 'sales') %>% dplyr::collect()
+
+#remove factor for sale date
+sales_clean <- 
+  sales %>% 
+  select(c(parcel_num, sale_date, sale_price, sale_terms, property_c)) %>% 
+  rename(c(prop_class = property_c)) %>% 
+  mutate(sale_date = format(as.Date(sale_date), format="%Y"),
+         sale_terms = str_replace_all(sale_terms, "Not Arms Length", "NOT ARMS LENGTH"),
+         sale_terms = str_replace_all(sale_terms, "not arms length", "NOT ARMS LENGTH"),
+         sale_terms = str_replace_all(sale_terms, "valid arms length", "VALID ARMS LENGTH"),
+         sale_terms = str_replace_all(sale_terms, "Valid Arms Length", "VALID ARMS LENGTH"),
+         sale_terms = str_replace_all(sale_terms, "bank sale used", "BANK SALE USED"),
+         sale_terms = str_replace_all(sale_terms, "00-NOT AUDITED", "NOT AUDITED"),
+         prop_class = as_factor(prop_class), 
+         sale_terms = as_factor(sale_terms)) %>% 
+  filter(sale_terms == "VALID ARMS LENGTH",
+         sale_date %in% years_for_evaluation,
+         prop_class == '401')
+
+rm(sales)
+invisible(gc())
+
+# Assessments
+assessments <- dplyr::tbl(con, 'assessments') %>% dplyr::collect()
+
+assessments_clean <-
+  assessments %>%
+  rename(c(parcel_num = PARCELNO,
+           assessed_value = ASSESSEDVALUE,
+           taxable_value = TAXABLEVALUE,
+           assessment_year = year,
+           prop_class = propclass)) %>% 
+  mutate(prop_class = as_factor(prop_class)) %>% 
+  filter(assessed_value > 2000)
+
+rm(assessments)
+invisible(gc())
+
+# Parcels: Create a parcels tibble that combines historic with all. Can filter down later if needed.
+parcels <- dplyr::tbl(con, 'parcels') %>% dplyr::collect()
+
+parcels_current_clean <-
+  parcels %>%
+  rename(parcel_num = parcel_number) %>%
+  mutate(zip_code = as.numeric(zip_code),
+         property_class = as.factor(property_class))
+
+rm(parcels)
+invisible(gc())
+
+parcels_historic <- dplyr::tbl(con, 'parcels_historic') %>% dplyr::collect()
+
+parcels_historic_clean <-
+  parcels_historic %>%
+  rename(parcel_num = PARCELNO,
+         address = PROPADDR,
+         zip_code = ZIPCODE,
+         taxpayer_1 = TAXPAYER1,
+         taxpayer_street = TAXPADDR,
+         taxpayer_city = TAXPCITY,
+         taxpayer_state = TAXPSTATE,
+         taxpayer_zip = TAXPZIP,
+         property_class = propclass,
+         tax_status = TAXSTATUS,
+         total_square_footage = TOTALSQFT,
+         total_acreage = TOTALACREAGE,
+         frontage = FRONTAGE,
+         homestead_pre = PRE,
+         sale_price = SALEPRICE,
+         sale_date = SALEDATE,
+         assessed_value = ASSESSEDVALUE,
+         taxable_value = TAXABLEVALUE) %>%
+  mutate(zip_code = as.numeric(zip_code),
+         property_class = as.factor(property_class)) %>% 
+  filter(!is.na(total_square_footage))
+
+rm(parcels_historic)
+invisible(gc())
+
+parcels_clean <-
+  left_join(parcels_current_clean, parcels_historic_clean) %>% 
+  select(c(ward, parcel_num, council_district, zip_code, total_square_footage, X, Y)) %>% 
+  mutate(zip_code = as.numeric(zip_code))
+
+rm(list='parcels_current_clean', 'parcels_historic_clean')
+invisible(gc())
+
+#Attributes
+attributes <- dplyr::tbl(con, 'attributes') %>% dplyr::collect()
+attributes_clean <- 
+  attributes %>% 
+  rename(neighborhood = Neighborhood,
+         total_square_footage = total_squa,
+         assessed_value = assessed_v,
+         taxable_value = taxable_va,
+         sale_price = 'Sale Price',
+         sale_date = 'SALE_YEAR',
+         total_floors = total_floo,
+         prop_class = property_c) %>% 
+  select(!c(st_num, st_name, taxpayer_1, use_code_d, homestead_, 'Sale Date', heightcat, Longitude, Latitude))  %>% 
+  mutate(prop_class = as_factor(prop_class))
+
+rm(attributes)
+invisible(gc())
+
+
+# Combine sales and assessments
+sales_and_assessments <- 
+  left_join(sales_clean, assessments_clean) %>% 
+  filter(!is.na(sale_date)) %>% 
+  mutate(sale_date = as.numeric(sale_date))
+
+rm(list='sales_clean', 'assessments_clean')
+invisible(gc())
+
+#Combine sales, assessments, parcels
+sales_assessments_parcels <- 
+  left_join(sales_and_assessments, parcels_clean) 
+
+rm(list='sales_and_assessments', 'parcels_clean')
+invisible(gc())
+
+
+sales_assessments_parcels_attributes <- 
+  left_join(sales_assessments_parcels, attributes_clean)
+
+rm(list='sales_assessments_parcels', 'attributes_clean')
+invisible(gc())
+  
+#Foreclosures
+foreclosures <- dplyr::tbl(con, 'foreclosures') %>% dplyr::collect()
+foreclosures_clean <- 
+  foreclosures %>% 
+  rename(address = prop_addr,
+         parcel_num = prop_parcelnum) %>% 
+  select(c(address, parcel_num, years_for_evaluation)) %>% 
+  pivot_longer(cols = years_for_evaluation,
+               names_to = "foreclosure_year",
+               values_to = "foreclosed",
+               values_drop_na = TRUE) %>% 
+  select(parcel_num, foreclosed)
+
+rm(foreclosures)
+invisible(gc())
+
+#Finally create full dataset
+
+full_dataset <- 
+  left_join(sales_assessments_parcels_attributes, foreclosures_clean)
+
+rm(list='sales_assessments_parcels_attributes', 'foreclosures_clean')
+invisible(gc())
+
+#Final cleanup--remove initial tibbles from SQLite now that we've filtered for the data we actually want
+
+rm(list = 'con', 'years_for_evaluation')
+invisible(gc())
+
+```
+
+
+# Introduction (Part A)
+
+Homes in Detroit have suffered from poorly assessed home values, which has contributed greatly to foreclosure during a time of economic instability. The UC Irvine Law Review's ["Taxed Out: Illegal Property Tax Assessments and the Epidemic of Tax Foreclosures in Detroit"](https://scholarship.law.uci.edu/ucilr/vol9/iss4/3/) analyzes  the relationship between over-assessing a home and its role in driving foreclosures, exposing government's role in creating conditions for people to lose their homes. The Harris School of Public Policy at the University of Chicago's The Center For Municipal Finance produced the report ["An Evaluation of Residential Property Tax Assessments in the City of Detroit, 2016-2018"](https://harris.uchicago.edu/files/evalrespropertytaxasdetroit20162018.pdf) shows how the city of Detroit attempted to correct that mistake, reducing the number of assessments higher than sales, but that it's still too high.
+
+```{r cmfproperty-sales-ratio, include=FALSE}
+ratios <-
+  invisible(
+  cmfproperty::reformat_data(
+    data = full_dataset,
+    sale_col = "sale_price",
+    assessment_col = "assessed_value",
+    sale_year_col = "sale_date",
+  ))
+
+stats <- cmfproperty::calc_iaao_stats(ratios)
+
+output <- diagnostic_plots(stats,
+                           ratios,
+                           min_reporting_yr = 2016,
+                           max_reporting_yr = 2019)
+```
+
+```{r display-grid, message = FALSE, warning = FALSE, echo = FALSE, verbose = FALSE}
+grid.arrange(output[[3]], output[[2]], ncol = 1)
+
+rm(list = 'stats', 'ratio', 'output')
+invisible(gc())
+
+```
+
+
+
+Detroit’s assessment values across percentile home values appear to have remained steady in dollars since 2016, even as home assessments increased over time. It is important to note, however, that the red line (homes at the 25th percentile of sale price) have the smallest gap between their assessed value and their sale price. This helps us to see the way in which inequality has been exacerbated by assessing homes at a much closer value to their sale price than for more expensive homes.
+
+
+
+# Additional Predictors Impact On Models (Part B)
+
+When evaluating over-assessments for homes in Detroit, using 2016 as a year to generate a model predicting the likelihood of over-assessments, we test a base model that evaluates the impact of ward, sale price, zip code, and  the total square footage of a home. Then, we compare the results by adding in more nuanced predictors, such as the percent of home foreclosures in a zip code and the average sale price of a home in the zip code. Interestingly, adding in these more nuanced variables made a less effective model; this may suggest that the initial model slightly overfit or that there is an interaction here that we do not understand.
+
+```{r first-model-overassessment, include=TRUE}
+
+# Get data filtered
+overassessed <- 
+full_dataset %>% 
+  mutate(overassessed = as_factor(if_else(sale_price < (assessed_value * 2),
+                                "YES",
+                                "NO")))
+
+overassessed_2016_sales <- 
+  overassessed %>% 
+    filter(sale_date == 2016,
+         assessment_year == 2016) 
+
+split <- rsample::initial_split(overassessed_2016_sales)
+
+train <- training(split)
+test <- testing(split)
+
+log_model <- 
+  logistic_reg() %>%
+  set_engine('glm') %>%
+  set_mode('classification')
+
+overassessed_first_recipe <- 
+  recipe(overassessed ~ ward + sale_price + zip_code + total_square_footage,
+      data = train) %>%
+  step_other(ward, threshold = 0.01) %>% 
+  step_other(zip_code, threshold = 0.01) %>% 
+  step_unknown(all_nominal_predictors()) %>%
+  step_dummy(all_nominal_predictors())
+  
+overassessed_workflow <- 
+  workflow() %>%
+  add_model(log_model) %>% 
+  add_recipe(overassessed_first_recipe)
+
+
+#Evaluate model
+rf_fit <- fit(overassessed_workflow, overassessed_2016_sales)
+
+homes_2016 <- 
+  test %>% 
+  filter(sale_date == 2016)
+
+overassessment_predictions <- 
+  augment(rf_fit, homes_2016)
+
+rm(list='rf_fit', 'homes_2016')
+
+overassment_evaluation <- 
+  left_join(overassessment_predictions, overassessed_2016_sales) %>% 
+  group_by(overassessed) %>% 
+  summarize(predicted_not_overassessed = sum(.pred_class == "NO", na.rm=TRUE),
+            predicted_overassessed = sum(.pred_class == "YES", na.rm = TRUE))
+
+# Create a classifier metrics table to help us further evaluate our model.
+
+true_negative <- overassment_evaluation$predicted_not_overassessed[1]
+false_negative <- overassment_evaluation$predicted_not_overassessed[2]
+false_positive <- overassment_evaluation$predicted_overassessed[1]
+true_positive <- overassment_evaluation$predicted_overassessed[2]
+
+true_positive_rate <- true_positive / (true_positive + false_negative)
+true_negative_rate <- true_negative / (true_negative + false_positive)
+false_positive_rate <- false_positive /(false_positive + true_negative)
+false_negative_rate <- false_negative / (false_negative + true_positive)
+positive_predictive_value <- true_positive / (true_positive + false_positive)
+
+classifier_metrics_table <- tibble(measurement = c("true positive rate", 
+                                                   "true negative rate",
+                                                   "false positive rate",
+                                                   "false negative rate",
+                                                   "positive predictive value"), 
+                                   initial_model = c(true_positive_rate, 
+                                               true_negative_rate,
+                                               false_positive_rate,
+                                               false_negative_rate,
+                                               positive_predictive_value))
+
+```
+
+
+```{r second-model-overassessment-and-comparison}
+
+additional_predictor_variables <- 
+  full_dataset %>% 
+  filter(!is.na(zip_code)) %>% 
+  group_by(zip_code) %>% 
+  summarise(percent_zip_foreclosures = sum(foreclosed, na.rm=TRUE)/n(),
+            avg_sale_price_zip = mean(sale_price, na.rm=TRUE))
+
+overassessed_with_additional_field <- 
+  left_join(overassessed_2016_sales, additional_predictor_variables)
+
+split_2 <- rsample::initial_split(overassessed_with_additional_field)
+
+train_model_2 <- training(split_2)
+test_model_2 <- testing(split_2)
+
+# Add new field here 
+overassessed_second_recipe <- 
+  recipe(overassessed ~ ward + sale_price + zip_code + total_square_footage + percent_zip_foreclosures + avg_sale_price_zip,
+      data = train_model_2) %>%
+  step_other(ward, threshold = 0.01) %>% 
+  step_other(zip_code, threshold = 0.01) %>% 
+  step_unknown(all_nominal_predictors()) %>%
+  step_dummy(all_nominal_predictors())
+
+
+#use old workflow with model, just remove old recipe and add new one
+overassessed_workflow <- 
+  overassessed_workflow %>% 
+  update_recipe(overassessed_second_recipe)
+
+rf_fit_model_2 <- 
+  fit(overassessed_workflow, overassessed_with_additional_field)
+
+homes_2016_model2 <- 
+  test_model_2 %>% 
+  filter(sale_date == 2016)
+
+overassessment_predictions_model_2 <- 
+  augment(rf_fit_model_2, homes_2016_model2)
+
+
+overassment_evaluation_model_2 <- 
+  left_join(overassessment_predictions_model_2, overassessed) %>% 
+  group_by(overassessed) %>% 
+  summarize(predicted_not_overassessed = sum(.pred_class == "NO", na.rm=TRUE),
+            predicted_overassessed = sum(.pred_class == "YES", na.rm = TRUE))
+
+# Create a classifier metrics table to help us further evaluate our model.
+
+true_negative <- overassment_evaluation_model_2$predicted_not_overassessed[1]
+false_negative <- overassment_evaluation_model_2$predicted_not_overassessed[2]
+false_positive <- overassment_evaluation_model_2$predicted_overassessed[1]
+true_positive <- overassment_evaluation_model_2$predicted_overassessed[2]
+
+true_positive_rate <- true_positive / (true_positive + false_negative)
+true_negative_rate <- true_negative / (true_negative + false_positive)
+false_positive_rate <- false_positive /(false_positive + true_negative)
+false_negative_rate <- false_negative / (false_negative + true_positive)
+positive_predictive_value <- true_positive / (true_positive + false_positive)
+
+classifier_metrics_table_second <- tibble(measurement = c("true positive rate", 
+                                                   "true negative rate",
+                                                   "false positive rate",
+                                                   "false negative rate",
+                                                   "positive predictive value"), 
+                                   with_additional_values = c(true_positive_rate, 
+                                               true_negative_rate,
+                                               false_positive_rate,
+                                               false_negative_rate,
+                                               positive_predictive_value))
+
+#classifier_metrics_table_second
+
+rm(list='true_negative', 'false_negative', 'false_positive', 'true_positive',
+   'true_positive_rate',
+   'true_negative_rate',
+   'false_positive_rate',
+   'false_negative_rate',
+   'positive_predictive_value')
+invisible(gc())
+
+
+# Table Comparing Initial Model and New Model
+
+comparison_data_first_and_second_model <- 
+  left_join(classifier_metrics_table, classifier_metrics_table_second)
+
+comparison_data_first_and_second_model
+
+```
+
+
+Stepping into the shoes of the assessor in Detroit, we also develop a model to predict sale prices of homes in Detroit, which could be used to inform assessments. By evaluating and testing on sales in the city of Detroit in 2019, we can train our model based on sales and see if we are able to effectively predict sale prices for other homes in Detroit. We follow our strategy for over-assessments, generating a base model that looks at ward, zip code, total square footage, and assessed_value. We then augment this model with the percent of home foreclosures in a zip code and the average sale price of a home in the zip code to see if it improves our model. Unlike the over-assessments, this helped to improve our model.
+
+
+```{r first-model-sales-predictions}
+
+split_sales <- rsample::initial_split(full_dataset)
+
+train_sales <- training(split_sales)
+test_sales <- testing(split_sales)
+
+linear_model_sales <- 
+  linear_reg() %>% 
+  set_engine("lm") 
+
+sale_price_recipe <- 
+  recipe(sale_price ~ ward + zip_code + sale_price + total_square_footage + assessed_value,
+      data = train_sales) %>%
+  step_other(ward, threshold = 0.01) %>% 
+  step_other(zip_code, threshold = 0.01) %>% 
+  step_unknown(all_nominal_predictors()) %>%
+  step_dummy(all_nominal_predictors())
+  
+sale_wflow <- 
+  workflow() %>%
+  add_model(linear_model_sales) %>% 
+  add_recipe(sale_price_recipe)
+
+# Fit the model
+rf_fit_sales <- fit(sale_wflow, train_sales)
+
+rf_fit_sales %>% tidy() %>% view()
+
+sales_2019 <- 
+  test_sales %>% 
+  filter(sale_date == 2019)
+
+sale_price_predictions <- 
+  augment(rf_fit_sales, sales_2019)
+
+first_prediction <- 
+  yardstick::rmse(sale_price_predictions,
+       truth = sale_price,
+       estimate = .pred)
+
+first_prediction_estimate <- 
+  first_prediction$.estimate[1]
+  
+rm(first_prediction)
+invisible(gc())
+
+```
+
+```{r second-model-sales-predictions}
+
+sales_predictions_with_additional_dataset <- 
+  left_join(full_dataset, additional_predictor_variables)
+
+sales_predictions_with_additional_dataset_2019 <- 
+  sales_predictions_with_additional_dataset %>% 
+  filter(sale_date == 2019)
+
+split_sales_model_2 <- 
+  rsample::initial_split(sales_predictions_with_additional_dataset_2019)
+
+train_sales_2 <- training(split_sales_model_2)
+test_sales_2 <- testing(split_sales_model_2)
+
+
+sale_price_recipe_model_2 <- 
+  recipe(sale_price ~ ward + sale_price + zip_code + assessed_value + percent_zip_foreclosures + avg_sale_price_zip,
+      data = train_sales_2) %>%
+  step_other(ward, threshold = 0.01) %>% 
+  step_other(zip_code, threshold = 0.01) %>% 
+  step_unknown(all_nominal_predictors()) %>%
+  step_dummy(all_nominal_predictors())
+  
+sale_wflow <- 
+  sale_wflow %>% 
+  update_recipe(sale_price_recipe_model_2)
+
+# Fit the model
+rf_fit_sales_model_2 <- fit(sale_wflow, train_sales_2)
+
+sale_price_predictions <- 
+  augment(rf_fit_sales_model_2, test_sales_2)
+
+#Now, compare initial model with this model
+
+second_prediction <- 
+  yardstick::rmse(sale_price_predictions,
+       truth = sale_price,
+       estimate = .pred)
+
+second_prediction_estimate <- 
+  second_prediction$.estimate[1]
+
+
+all_predictions <- 
+  tibble(first_RMSE = first_prediction_estimate,
+         second_RMSE = second_prediction_estimate)
+  
+all_predictions
+
+```
