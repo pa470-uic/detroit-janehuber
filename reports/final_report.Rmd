@@ -206,7 +206,7 @@ invisible(gc())
 ```
 
 
-# Introduction (Part A)
+# Introduction
 
 Homes in Detroit have suffered from poorly assessed home values, which has contributed greatly to foreclosure during a time of economic instability. The UC Irvine Law Review's ["Taxed Out: Illegal Property Tax Assessments and the Epidemic of Tax Foreclosures in Detroit"](https://scholarship.law.uci.edu/ucilr/vol9/iss4/3/) analyzes  the relationship between over-assessing a home and its role in driving foreclosures, exposing government's role in creating conditions for people to lose their homes. The Harris School of Public Policy at the University of Chicago's The Center For Municipal Finance produced the report ["An Evaluation of Residential Property Tax Assessments in the City of Detroit, 2016-2018"](https://harris.uchicago.edu/files/evalrespropertytaxasdetroit20162018.pdf) shows how the city of Detroit attempted to correct that mistake, reducing the number of assessments higher than sales, but that it's still too high.
 
@@ -242,9 +242,9 @@ Detroit’s assessment values across percentile home values appear to have remai
 
 
 
-# Additional Predictors Impact On Models (Part B)
+# New Assessment Models (Part A)
 
-When evaluating over-assessments for homes in Detroit, using 2016 as a year to generate a model predicting the likelihood of over-assessments, we test a base model that evaluates the impact of ward, sale price, zip code, and  the total square footage of a home. Then, we compare the results by adding in more nuanced predictors, such as the percent of home foreclosures in a zip code and the average sale price of a home in the zip code. Interestingly, adding in these more nuanced variables made a less effective model; this may suggest that the initial model slightly overfit or that there is an interaction here that we do not understand.
+<!-- When evaluating over-assessments for homes in Detroit, using 2016 as a year to generate a model predicting the likelihood of over-assessments, we test a base model that evaluates the impact of ward, sale price, zip code, and  the total square footage of a home. Then, we compare the results by adding in more nuanced predictors, such as the percent of home foreclosures in a zip code and the average sale price of a home in the zip code. Interestingly, adding in these more nuanced variables made a less effective model; this may suggest that the initial model slightly overfit or that there is an interaction here that we do not understand. -->
 
 ```{r first-model-overassessment, include=TRUE}
 
@@ -525,5 +525,63 @@ all_predictions <-
          second_RMSE = second_prediction_estimate)
   
 all_predictions
+```
+
+# Comparison
+
+```{r comparing-models}
+
+linear_reg_spec <- 
+   linear_reg(penalty = tune(), mixture = tune()) %>% 
+   set_engine("glmnet")
+
+rf_spec <- 
+   rand_forest(mtry = tune(), min_n = tune(), trees = 1000) %>% 
+   set_engine("ranger") %>% 
+   set_mode("regression")
+   
+xgb_spec <- 
+   boost_tree(tree_depth = tune(), learn_rate = tune(), loss_reduction = tune(), 
+              min_n = tune(), sample_size = tune(), trees = tune()) %>% 
+   set_engine("xgboost") %>% 
+   set_mode("regression")
+   
+my_set <- workflow_set(
+  preproc = list(normalized = sale_price_recipe),
+  models = list(linear_reg = linear_reg_spec, random_forest = rf_spec, boosted = xgb_spec)
+)
+
+
+grid_ctrl <-
+   control_grid(
+      save_pred = TRUE,
+      save_workflow = TRUE
+   )
+
+sales_samples <- 
+   vfold_cv(train_sales_2, repeats=1, v=3) 
+
+
+grid_results <-
+   my_set %>%
+   workflow_map(
+      seed = 1503,
+      resamples = sales_samples,
+      grid = 25,
+      control = grid_ctrl,
+      verbose = TRUE
+   )
+
+best_results <- 
+   grid_results %>% 
+   extract_workflow_set_result("best model type name") %>% 
+   select_best(metric = "your metric")
+best_results
+
+best_results_fit <- 
+   race_results %>% 
+   extract_workflow("best model type name") %>% 
+   finalize_workflow(best_results) %>% 
+   last_fit(split = your_testing_data)
 
 ```
