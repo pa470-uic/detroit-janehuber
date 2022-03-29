@@ -620,15 +620,43 @@ overassessment_predictions_census_tract <-
                         output = "wide",
                         geometry = T) %>%
       select(GEOID) %>%
+  ungroup() %>% 
   sf::st_transform(crs = 4326))
+
+# Get one GEOID per geometry, left join that later
+
+geoid_and_geometry <- 
+  overassessment_predictions_census_tract %>% 
+  select(GEOID, geometry) %>% 
+    st_join(
+    tigris::tracts(state = "MI",
+                   county = "Wayne",
+                   cb = T) %>%
+      select(GEOID),
+    by = "GEOID",
+    within = TRUE)
 
 #Attempt to get the common pred class per GEOID?
 sale_preds_grouped_census <-
   overassessment_predictions_census_tract %>%
   group_by(GEOID) %>%
   summarise(prediction_class = as_factor(if_else(((sum(.pred_YES) / sum(.pred_NO)) >= 1), "YES", "NO")),
-             geometry = st_combine(geometry)) 
+             geometry = st_simplify(st_combine(geometry)))
 
+
+
+new_data <- 
+  st_join(geoid_and_geometry, sale_preds_grouped_census, left = TRUE) %>% 
+  select(GEOID.x, geometry, prediction_class) %>% 
+  rename(GEOID = GEOID.x) %>% 
+  left_join(
+    tigris::tracts(state = "MI",
+                   county = "Wayne",
+                   cb = T) %>%
+      select(GEOID),
+    by = "GEOID"
+  ) %>%
+  sf::st_as_sf()
 # %>% 
 #   select(GEOID, avg_prediction)
               
@@ -682,34 +710,36 @@ sale_preds_grouped_census <-
 # pal <- colorBin("YlOrRd", domain = sale_preds_grouped_census$average_predictions)
 
 #doesn't work
-# leaf_sf_col(sale_preds_grouped_census$geometry, sale_preds_grouped_census$average_predictions,
-#      col_method = "bin", 
-#      col_cuts = c(0, 10, 50, 100, 150, 200, Inf))
+leaf_sf_col(new_data$geometry, new_data$prediction_class,
+     col_method = "bin",
+     col_cuts = c(0, 10, 50, 100, 150, 200, Inf))
 
 #Doesn't work
-# map <- 
-# leaflet() %>% 
-#   addProviderTiles(providers$OpenStreetMap) %>% 
-#   addPolygons(data = sale_preds_grouped_census)
+map <-
+leaflet() %>%
+  addProviderTiles(providers$OpenStreetMap) %>%
+  addPolygons(data = new_data$geometry)
 
 #Doesn't work
-# base_map <- 
-#   sale_preds_grouped_census %>% 
-#   leaflet(geometric_points) %>%
-#   addProviderTiles(provider = "CartoDB.Positron") %>% 
-#   addPolygons(
-#       map=geometry,
-#       fillColor = ~pal(average_predictions),
-#                 stroke = FALSE,
-#                 smoothFactor = 0,
-#                 fillOpacity = 0.7) %>%
-#     addLegend("bottomright", 
-#               pal = pal, 
-#               values = ~ average_predictions,
-#               title = "Average predicted sale price",
-#               opacity = 1)
-# 
-# base_map
+base_map <-
+  leaflet(new_data) %>%
+  addProviderTiles(provider = "CartoDB.Positron") %>%
+  addPolygons(
+      map=geometry,
+      fillColor = ~pal(prediction_class),
+                stroke = FALSE,
+                smoothFactor = 0,
+                fillOpacity = 0.7) 
+
+
+%>%
+    addLegend("bottomright",
+              pal = pal,
+              values = ~ prediction_class,
+              title = "Average predicted sale price",
+              opacity = 1)
+
+base_map
 
 ```
 
