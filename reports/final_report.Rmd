@@ -270,7 +270,7 @@ log_model <-
   set_engine('glm') %>%
   set_mode('classification')
 
-overassessed_first_recipe <- 
+overassessed_first_<- <- 
   recipe(overassessed ~ ward + sale_price + zip_code + total_square_footage,
       data = train) %>%
   step_other(ward, threshold = 0.01) %>% 
@@ -440,11 +440,16 @@ linear_model_sales <-
 sale_price_recipe <- 
   recipe(sale_price ~ ward + zip_code + sale_price + total_square_footage + assessed_value,
       data = train_sales) %>%
-  step_other(ward, threshold = 0.01) %>% 
+  step_naomit(ward) %>% 
+  step_naomit(zip_code) %>% 
+  step_naomit(sale_price) %>% 
+  step_naomit(total_square_footage) %>% 
+  step_naomit(assessed_value) %>% 
+    step_other(ward, threshold = 0.01) %>% 
   step_other(zip_code, threshold = 0.01) %>% 
   step_unknown(all_nominal_predictors()) %>%
   step_dummy(all_nominal_predictors())
-  
+
 sale_wflow <- 
   workflow() %>%
   add_model(linear_model_sales) %>% 
@@ -494,6 +499,12 @@ test_sales_2 <- testing(split_sales_model_2)
 sale_price_recipe_model_2 <- 
   recipe(sale_price ~ ward + sale_price + zip_code + assessed_value + percent_zip_foreclosures + avg_sale_price_zip,
       data = train_sales_2) %>%
+  step_naomit(ward) %>% 
+  step_naomit(sale_price) %>% 
+  step_naomit(zip_code) %>% 
+  step_naomit(assessed_value) %>% 
+  step_naomit(percent_zip_foreclosures) %>% 
+  step_naomit(avg_sale_price_zip) %>% 
   step_other(ward, threshold = 0.01) %>% 
   step_other(zip_code, threshold = 0.01) %>% 
   step_unknown(all_nominal_predictors()) %>%
@@ -547,8 +558,8 @@ xgb_spec <-
    set_mode("regression")
    
 my_set <- workflow_set(
-  preproc = list(normalized = sale_price_recipe),
-  models = list(linear_reg = linear_reg_spec, random_forest = rf_spec, boosted = xgb_spec)
+  preproc = list(normalized = sale_price_recipe_model_2),
+  models = list(random_forest = rf_spec)
 )
 
 
@@ -571,6 +582,10 @@ grid_results <-
       control = grid_ctrl,
       verbose = TRUE
    )
+
+grid_results %>% 
+   rank_results()
+
 
 best_results <- 
    grid_results %>% 
