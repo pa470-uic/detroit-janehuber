@@ -270,7 +270,7 @@ log_model <-
   set_engine('glm') %>%
   set_mode('classification')
 
-overassessed_first_<- <- 
+overassessed_first_recipe <- 
   recipe(overassessed ~ ward + sale_price + zip_code + total_square_footage,
       data = train) %>%
   step_other(ward, threshold = 0.01) %>% 
@@ -428,7 +428,17 @@ Stepping into the shoes of the assessor in Detroit, we also develop a model to p
 
 ```{r first-model-sales-predictions}
 
-split_sales <- rsample::initial_split(full_dataset)
+data_for_predictions <- 
+  full_dataset %>% 
+  filter(sale_date == 2019,
+     !is.na(zip_code),
+     !is.na(total_square_footage),
+     !is.na(ward),
+     !is.na(assessed_value))
+
+split_sales <- 
+  rsample::initial_split(data_for_predictions)
+
 
 train_sales <- training(split_sales)
 test_sales <- testing(split_sales)
@@ -438,14 +448,9 @@ linear_model_sales <-
   set_engine("lm") 
 
 sale_price_recipe <- 
-  recipe(sale_price ~ ward + zip_code + sale_price + total_square_footage + assessed_value,
+  recipe(sale_price ~ ward + zip_code + total_square_footage + assessed_value,
       data = train_sales) %>%
-  step_naomit(ward) %>% 
-  step_naomit(zip_code) %>% 
-  step_naomit(sale_price) %>% 
-  step_naomit(total_square_footage) %>% 
-  step_naomit(assessed_value) %>% 
-    step_other(ward, threshold = 0.01) %>% 
+  step_other(ward, threshold = 0.01) %>% 
   step_other(zip_code, threshold = 0.01) %>% 
   step_unknown(all_nominal_predictors()) %>%
   step_dummy(all_nominal_predictors())
@@ -457,8 +462,6 @@ sale_wflow <-
 
 # Fit the model
 rf_fit_sales <- fit(sale_wflow, train_sales)
-
-rf_fit_sales %>% tidy() %>% view()
 
 sales_2019 <- 
   test_sales %>% 
@@ -487,7 +490,13 @@ sales_predictions_with_additional_dataset <-
 
 sales_predictions_with_additional_dataset_2019 <- 
   sales_predictions_with_additional_dataset %>% 
-  filter(sale_date == 2019)
+  filter(sale_date == 2019,
+         !is.na(zip_code),
+         !is.na(percent_zip_foreclosures),
+         !is.na(avg_sale_price_zip),
+         !is.na(assessed_value),
+         !is.na(total_square_footage),
+         !is.na(ward))
 
 split_sales_model_2 <- 
   rsample::initial_split(sales_predictions_with_additional_dataset_2019)
@@ -499,12 +508,6 @@ test_sales_2 <- testing(split_sales_model_2)
 sale_price_recipe_model_2 <- 
   recipe(sale_price ~ ward + sale_price + zip_code + assessed_value + percent_zip_foreclosures + avg_sale_price_zip,
       data = train_sales_2) %>%
-  step_naomit(ward) %>% 
-  step_naomit(sale_price) %>% 
-  step_naomit(zip_code) %>% 
-  step_naomit(assessed_value) %>% 
-  step_naomit(percent_zip_foreclosures) %>% 
-  step_naomit(avg_sale_price_zip) %>% 
   step_other(ward, threshold = 0.01) %>% 
   step_other(zip_code, threshold = 0.01) %>% 
   step_unknown(all_nominal_predictors()) %>%
@@ -562,6 +565,7 @@ my_set <- workflow_set(
   models = list(random_forest = rf_spec)
 )
 
+  #models = list(linear_reg = linear_reg_spec, random_forest = rf_spec, boosted = xgb_spec)
 
 grid_ctrl <-
    control_grid(
