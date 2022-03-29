@@ -24,6 +24,7 @@ library(glmnet)
 library(leaflet)
 library(sf)
 library(simplevis)
+library(xgboost)
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE, verbose = FALSE)
 
 theme_set(theme_bw())
@@ -444,8 +445,9 @@ train_sales <- training(split_sales)
 test_sales <- testing(split_sales)
 
 linear_model_sales <- 
-  linear_reg() %>% 
-  set_engine("lm") 
+   boost_tree() %>% 
+   set_engine("xgboost") %>% 
+   set_mode("regression")
 
 sale_price_recipe <- 
   recipe(sale_price ~ ward + zip_code + total_square_footage + assessed_value,
@@ -562,10 +564,9 @@ xgb_spec <-
    
 my_set <- workflow_set(
   preproc = list(normalized = sale_price_recipe_model_2),
-  models = list(random_forest = rf_spec)
+  models = list(linear_reg = linear_reg_spec, random_forest = rf_spec, boosted = xgb_spec)
 )
 
-  #models = list(linear_reg = linear_reg_spec, random_forest = rf_spec, boosted = xgb_spec)
 
 grid_ctrl <-
    control_grid(
@@ -582,14 +583,14 @@ grid_results <-
    workflow_map(
       seed = 1503,
       resamples = sales_samples,
-      grid = 25,
+      grid = 5,
       control = grid_ctrl,
       verbose = TRUE
    )
 
 grid_results %>% 
    rank_results()
-
+```
 
 best_results <- 
    grid_results %>% 
@@ -602,5 +603,27 @@ best_results_fit <-
    extract_workflow("best model type name") %>% 
    finalize_workflow(best_results) %>% 
    last_fit(split = your_testing_data)
-
+   
+   
+# Hyperparameter Exploration for Classification (Part B)
+   
+   
+```{r overassessed-hyperparameter-exploration}
+ 
+ 
+ 
 ```
+
+# Conclusion & Presentation (Part C)
+
+Final thoughts here, comparing to all of these things.
+
+
+
+
+
+
+
+
+
+
