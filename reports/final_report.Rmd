@@ -17,6 +17,7 @@ knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE, verbose = 
 
 library(tidyverse)
 library(lubridate)
+library(parsnip)
 library(cmfproperty)
 library(purrr)
 library(gridExtra)
@@ -28,6 +29,8 @@ library(sf)
 library(simplevis)
 library(xgboost)
 library(finetune)
+library(tune)
+library(baguette)
 
 theme_set(theme_bw())
 ```
@@ -515,7 +518,6 @@ sale_price_recipe_model_2 <-
       data = train_sales_2) %>%
   step_other(ward, threshold = 0.01) %>% 
   step_other(zip_code, threshold = 0.01) %>% 
-  step_unknown(all_nominal_predictors()) %>%
   step_dummy(all_nominal_predictors())
   
 sale_wflow <- 
@@ -605,34 +607,52 @@ grid_results <-
       verbose = TRUE
    )
 
-grid_results %>% 
+#my_set %>% extract_workflow(id = "normalized_boosted")
+
+# I'm having a lot of trouble with getting my workflow_map. I'm unable to get any model but the linear regression to work in the workflow set. However, when I apply those models on their own (without tuning parameters) to my workflow and recipes on their own, I have confirmed that they all work. Feeling stumped on this one...
+
+grid_results %>%
    rank_results()
+
+best_results <-
+   grid_results %>%
+   extract_workflow_set_result("normalized_KNN") %>%
+   select_best(metric = "rmse")
+best_results
+ 
+best_results_fit <-
+   grid_results %>%
+   extract_workflow("normalized_KNN") %>%
+   finalize_workflow(best_results) %>%
+   last_fit(split = split_sales_model_2)
 ```
 
-best_results <- 
-   grid_results %>% 
-   extract_workflow_set_result("best model type name") %>% 
-   select_best(metric = "your metric")
-best_results
 
-best_results_fit <- 
-   race_results %>% 
-   extract_workflow("best model type name") %>% 
-   finalize_workflow(best_results) %>% 
-   last_fit(split = your_testing_data)
    
    
 # Hyperparameter Exploration for Classification (Part B)
    
    
 ```{r overassessed-hyperparameter-exploration}
- 
 initial_vals <- your_workflow %>%
   tune_grid(
     resampled_data,
     grid = 4,
     metrics = your_metric_set,
   )
+
+ctrl <- control_bayes(verbose = TRUE)
+
+your_search <- 
+  your_workflow %>%
+  tune_bayes(
+    resamples = ...,
+    metrics = ...,
+    initial = initial_vals, #note you may simply pass a number here e.g. 6 for a random search
+    iter = 25,
+    control = ctrl
+  )
+
  
 ```
 
