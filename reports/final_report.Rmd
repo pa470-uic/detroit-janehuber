@@ -564,6 +564,11 @@ xgb_spec <-
               min_n = tune(), sample_size = tune(), trees = tune()) %>% 
    set_engine("xgboost") %>% 
    set_mode("regression")
+
+knn_spec <- 
+   nearest_neighbor(neighbors = tune(), dist_power = tune(), weight_func = tune()) %>% 
+   set_engine("kknn") %>% 
+   set_mode("regression")
    
 
 # Update my recipe here:
@@ -576,13 +581,8 @@ updated_recipe <-
 
 my_set <- workflow_set(
   preproc = list(normalized = sale_price_recipe_model_2),
-  models = list(linear_reg = linear_reg_spec, random_forest = rf_spec, boosted = xgb_spec)
+  models = list(linear_reg = linear_reg_spec, random_forest = rf_spec, boosted = xgb_spec, KNN = knn_spec)
 )
-
-#  models = list(linear_reg = linear_reg_spec, random_forest = rf_spec, boosted = xgb_spec)
-
-
-
 
 
 grid_ctrl <-
@@ -627,7 +627,12 @@ best_results_fit <-
    
 ```{r overassessed-hyperparameter-exploration}
  
- 
+initial_vals <- your_workflow %>%
+  tune_grid(
+    resampled_data,
+    grid = 4,
+    metrics = your_metric_set,
+  )
  
 ```
 
