@@ -625,6 +625,15 @@ best_results_fit <-
    extract_workflow("normalized_KNN") %>%
    finalize_workflow(best_results) %>%
    last_fit(split = split_sales_model_2)
+
+
+best_results_fit %>% 
+   collect_predictions() %>% 
+   ggplot(aes(x = sale_price, y = .pred)) + 
+   geom_abline(color = "gray50", lty = 2) + 
+   geom_point(alpha = 0.5) + 
+   coord_obs_pred() + 
+   labs(x = "observed", y = "predicted")
 ```
 
 
