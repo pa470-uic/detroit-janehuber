@@ -31,6 +31,7 @@ library(xgboost)
 library(finetune)
 library(tune)
 library(baguette)
+library(kernlab)
 
 theme_set(theme_bw())
 ```
@@ -357,7 +358,6 @@ overassessed_second_recipe <-
       data = train_model_2) %>%
   step_other(ward, threshold = 0.01) %>% 
   step_other(zip_code, threshold = 0.01) %>% 
-  step_unknown(all_nominal_predictors()) %>%
   step_dummy(all_nominal_predictors())
 
 
@@ -606,8 +606,8 @@ grid_results <-
       verbose = TRUE
    )
 
-grid_results %>%
-   rank_results()
+# grid_results %>%
+#    rank_results()
 
 best_results <-
    grid_results %>%
@@ -638,29 +638,46 @@ best_results_fit %>%
    
    
 ```{r overassessed-hyperparameter-exploration}
-initial_vals <- 
-  overassessed_workflow %>%
+overassessed_samples <- 
+   vfold_cv(train_model_2, repeats=1, v=3) 
+
+svm_spec <- 
+  svm_rbf(cost = tune(), rbf_sigma = tune()) %>% 
+  set_engine("kernlab") %>% 
+  set_mode("classification")
+
+svm_wflow <- 
+  workflow() %>% 
+  add_model(svm_spec) %>% 
+  add_recipe(overassessed_second_recipe)
+
+perf_meas <- metric_set(roc_auc, mn_log_loss)
+
+# What sort of metrics are appropriate here? Is the ROC and the MN Log Loss appropriate starting points?
+
+initial_vals <-
+  svm_wflow %>%
   tune_grid(
-    resampled_data,
+    overassessed_samples,
     grid = 4,
-    metrics = your_metric_set,
+    metrics = perf_meas
   )
 
 ctrl <- control_bayes(verbose = TRUE)
 
-overassessed_samples <- 
-   vfold_cv(train_model_2, repeats=1, v=3) 
 
-your_search <- 
-  initial_vals %>%
+
+your_search <-
+  svm_wflow %>%
   tune_bayes(
     resamples = overassessed_samples,
-    metrics = ...,
+    metrics = perf_meas,
     initial = initial_vals,
     iter = 25,
     control = ctrl
   )
 
+show_best(your_search)
  
 ```
 
