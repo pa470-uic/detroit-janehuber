@@ -281,7 +281,6 @@ overassessed_first_recipe <-
       data = train) %>%
   step_other(ward, threshold = 0.01) %>% 
   step_other(zip_code, threshold = 0.01) %>% 
-  step_unknown(all_nominal_predictors()) %>%
   step_dummy(all_nominal_predictors())
   
 overassessed_workflow <- 
@@ -550,7 +549,7 @@ all_predictions
 
 # Comparison
 
-```{r comparing-models}
+```{r comparing-sales-models}
 
 linear_reg_spec <- 
    linear_reg(penalty = tune(), mixture = tune()) %>% 
@@ -602,14 +601,10 @@ grid_results <-
    workflow_map(
       seed = 1503,
       resamples = sales_samples,
-      grid = 5,
+      grid = 15,
       control = grid_ctrl,
       verbose = TRUE
    )
-
-#my_set %>% extract_workflow(id = "normalized_boosted")
-
-# I'm having a lot of trouble with getting my workflow_map. I'm unable to get any model but the linear regression to work in the workflow set. However, when I apply those models on their own (without tuning parameters) to my workflow and recipes on their own, I have confirmed that they all work. Feeling stumped on this one...
 
 grid_results %>%
    rank_results()
@@ -643,7 +638,8 @@ best_results_fit %>%
    
    
 ```{r overassessed-hyperparameter-exploration}
-initial_vals <- your_workflow %>%
+initial_vals <- 
+  overassessed_workflow %>%
   tune_grid(
     resampled_data,
     grid = 4,
@@ -652,12 +648,15 @@ initial_vals <- your_workflow %>%
 
 ctrl <- control_bayes(verbose = TRUE)
 
+overassessed_samples <- 
+   vfold_cv(train_model_2, repeats=1, v=3) 
+
 your_search <- 
-  your_workflow %>%
+  initial_vals %>%
   tune_bayes(
-    resamples = ...,
+    resamples = overassessed_samples,
     metrics = ...,
-    initial = initial_vals, #note you may simply pass a number here e.g. 6 for a random search
+    initial = initial_vals,
     iter = 25,
     control = ctrl
   )
