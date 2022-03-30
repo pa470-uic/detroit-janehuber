@@ -13,6 +13,8 @@ output:
 
 
 ```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE, verbose = FALSE)
+
 library(tidyverse)
 library(lubridate)
 library(cmfproperty)
@@ -25,7 +27,7 @@ library(leaflet)
 library(sf)
 library(simplevis)
 library(xgboost)
-knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE, verbose = FALSE)
+library(finetune)
 
 theme_set(theme_bw())
 ```
@@ -498,7 +500,8 @@ sales_predictions_with_additional_dataset_2019 <-
          !is.na(avg_sale_price_zip),
          !is.na(assessed_value),
          !is.na(total_square_footage),
-         !is.na(ward))
+         !is.na(ward)) %>% 
+  na.omit(sales_predictions_with_additional_dataset_2019)
 
 split_sales_model_2 <- 
   rsample::initial_split(sales_predictions_with_additional_dataset_2019)
@@ -562,10 +565,24 @@ xgb_spec <-
    set_engine("xgboost") %>% 
    set_mode("regression")
    
+
+# Update my recipe here:
+updated_recipe <- 
+  sale_price_recipe_model_2 %>% 
+  step_YeoJohnson(all_numeric_predictors()) %>% 
+  step_normalize(all_numeric_predictors()) %>% 
+  step_pca(all_numeric_predictors(), num_comp = tune()) %>% 
+  step_normalize(all_numeric_predictors())
+
 my_set <- workflow_set(
   preproc = list(normalized = sale_price_recipe_model_2),
   models = list(linear_reg = linear_reg_spec, random_forest = rf_spec, boosted = xgb_spec)
 )
+
+#  models = list(linear_reg = linear_reg_spec, random_forest = rf_spec, boosted = xgb_spec)
+
+
+
 
 
 grid_ctrl <-
