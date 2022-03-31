@@ -251,7 +251,7 @@ Detroit’s assessment values across percentile home values appear to have remai
 
 # New Assessment Models (Part A)
 
-<!-- When evaluating over-assessments for homes in Detroit, using 2016 as a year to generate a model predicting the likelihood of over-assessments, we test a base model that evaluates the impact of ward, sale price, zip code, and  the total square footage of a home. Then, we compare the results by adding in more nuanced predictors, such as the percent of home foreclosures in a zip code and the average sale price of a home in the zip code. Interestingly, adding in these more nuanced variables made a less effective model; this may suggest that the initial model slightly overfit or that there is an interaction here that we do not understand. -->
+When evaluating over-assessments for homes in Detroit, using 2016 as a year to generate a model predicting the likelihood of over-assessments, we test a base model that evaluates the impact of ward, sale price, zip code, and  the total square footage of a home. Then, we compare the results by adding in more nuanced predictors, such as the percent of home foreclosures in a zip code and the average sale price of a home in the zip code. Perhaps not surprisingly, adding in these more nuanced variables made for a more effective model. In addition to this work, 
 
 ```{r first-model-overassessment, include=TRUE}
 
@@ -428,7 +428,7 @@ invisible(gc())
 
 # Table Comparing Initial Model and New Model
 
-comparison_data_first_and_second_model <- 
+comparison_data_first_and_second_model <-
   left_join(classifier_metrics_table, classifier_metrics_table_second)
 
 comparison_data_first_and_second_model
@@ -549,14 +549,17 @@ second_prediction_estimate <-
   second_prediction$.estimate[1]
 
 
-all_predictions <- 
-  tibble(first_RMSE = first_prediction_estimate,
-         second_RMSE = second_prediction_estimate)
-  
-all_predictions
+# all_predictions <- 
+#   tibble(first_RMSE = first_prediction_estimate,
+#          second_RMSE = second_prediction_estimate)
+#   
+# all_predictions
 ```
 
 # Comparison
+
+In developing these models, we used GLM and experimented with adding more predictors to create a more accurate model. However, we can further explore how to best predict sale price by comparing different types of models and tuning them. Below, we will compare linear regression, random forests, XG Boost model, and a K-Nearest Neighbor model to see which performs the best.
+
 
 ```{r comparing-sales-models}
 
@@ -638,6 +641,16 @@ best_results_fit %>%
    geom_point(alpha = 0.5) + 
    coord_obs_pred() + 
    labs(x = "observed", y = "predicted")
+
+autoplot(
+   grid_results,
+   rank_metric = "rmse",  # <- how to order models
+   metric = "rmse",       # <- which metric to visualize
+   select_best = TRUE     # <- one point per workflow
+) +
+   geom_text(aes(y = mean - 1/2, label = wflow_id), angle = 90, hjust = 1) +
+   lims(y = c(3.5, 9.5)) +
+   theme(legend.position = "none")
 ```
 
 
@@ -700,6 +713,8 @@ model_fit
 ```
 
 # Conclusion (Part C)
+
+
 
 
 Paragraph 1:
