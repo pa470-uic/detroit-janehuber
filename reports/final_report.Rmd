@@ -680,7 +680,7 @@ your_search <-
     resamples = overassessed_samples,
     metrics = perf_meas,
     initial = initial_vals,
-    iter = 2,
+    iter = 10,
     control = ctrl
   )
 
@@ -701,8 +701,27 @@ model_fit
 
 # Conclusion (Part C)
 
-Final thoughts here, comparing to all of these things.
 
+Paragraph 1:
+- Lots of injustice in Detroit
+- Deserves good model
+
+After exploring Detroit's data model, it's clear the
+
+Paragraph 2:
+- Developed models of glm for classification and for predicting sale price.
+- Pretty poor models :/ 
+
+Paragraph 3:
+- When evaluating some further models, it looks like KNN was the best model that I was able to test; it produced better outcomes.
+- I do not think Detroit should use my models
+
+Paragraph 4: 
+- Right now, Detroit's models are extremely poor and are causing a lot of harm.
+- However, I think there are significant ethical concerns with the work I did that make it a bad idea for Detroit's assessor to adopt my model specifically.
+- First of all, I have low personal stakes in this project and am not a professional; we should have evidence-based reasons to support.
+- Secondly, the data is poor. While evaluating years where we know the answer, we know we are not very successful... We know harm is currently beging caused; what harm could be caused by training our data on a harmful housing market (capitalism!) and on racist patterns of valuing homes. We should exercise extreme caution in applying ML models based on this background.
+- Third, I think that the use of machine learning should be a decision made by people in elected office, since the results and implications of those decisions should, in a healthy democracy, be forced to... 
 
 
 
