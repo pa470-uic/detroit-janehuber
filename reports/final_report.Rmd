@@ -265,7 +265,13 @@ full_dataset %>%
 overassessed_2016_sales <- 
   overassessed %>% 
     filter(sale_date == 2016,
-         assessment_year == 2016) 
+         assessment_year == 2016) %>% 
+  mutate(log_sale_price = log(sale_price),
+         log_assessed_value = log(assessed_value)) %>% 
+  filter(!is.na(ward),
+         !is.na(sale_price),
+         !is.na(zip_code),
+         !is.na(total_square_footage))
 
 split <- rsample::initial_split(overassessed_2016_sales)
 
@@ -342,7 +348,9 @@ additional_predictor_variables <-
   filter(!is.na(zip_code)) %>% 
   group_by(zip_code) %>% 
   summarise(percent_zip_foreclosures = sum(foreclosed, na.rm=TRUE)/n(),
-            avg_sale_price_zip = mean(sale_price, na.rm=TRUE))
+            avg_sale_price_zip = mean(sale_price, na.rm=TRUE)) %>% 
+    filter(!is.na(percent_zip_foreclosures),
+         !is.na(avg_sale_price_zip))
 
 overassessed_with_additional_field <- 
   left_join(overassessed_2016_sales, additional_predictor_variables)
@@ -354,11 +362,11 @@ test_model_2 <- testing(split_2)
 
 # Add new field here 
 overassessed_second_recipe <- 
-  recipe(overassessed ~ ward + sale_price + zip_code + total_square_footage + percent_zip_foreclosures + avg_sale_price_zip,
+  recipe(overassessed ~ ward + sale_price + zip_code + total_square_footage + percent_zip_foreclosures,
       data = train_model_2) %>%
   step_other(ward, threshold = 0.01) %>% 
   step_other(zip_code, threshold = 0.01) %>% 
-  step_dummy(all_nominal_predictors())
+  step_dummy(all_nominal_predictors()) 
 
 
 #use old workflow with model, just remove old recipe and add new one
@@ -439,7 +447,8 @@ data_for_predictions <-
      !is.na(zip_code),
      !is.na(total_square_footage),
      !is.na(ward),
-     !is.na(assessed_value))
+     !is.na(assessed_value)) %>% 
+  mutate(log_av = log(assessed_value))
 
 split_sales <- 
   rsample::initial_split(data_for_predictions)
@@ -454,7 +463,7 @@ linear_model_sales <-
    set_mode("regression")
 
 sale_price_recipe <- 
-  recipe(sale_price ~ ward + zip_code + total_square_footage + assessed_value,
+  recipe(sale_price ~ ward + zip_code + total_square_footage + log_av,
       data = train_sales) %>%
   step_other(ward, threshold = 0.01) %>% 
   step_other(zip_code, threshold = 0.01) %>% 
@@ -603,7 +612,7 @@ grid_results <-
       resamples = sales_samples,
       grid = 15,
       control = grid_ctrl,
-      verbose = TRUE
+      verbose = FALSE
    )
 
 # grid_results %>%
@@ -638,20 +647,20 @@ best_results_fit %>%
    
    
 ```{r overassessed-hyperparameter-exploration}
-overassessed_samples <- 
-   vfold_cv(train_model_2, repeats=1, v=3) 
+overassessed_samples <-
+   vfold_cv(train_model_2, repeats=1, v=3)
 
-svm_spec <- 
-  svm_rbf(cost = tune(), rbf_sigma = tune()) %>% 
-  set_engine("kernlab") %>% 
+svm_spec <-
+  svm_rbf(cost = tune(), rbf_sigma = tune()) %>%
+  set_engine("kernlab") %>%
   set_mode("classification")
 
-svm_wflow <- 
-  workflow() %>% 
-  add_model(svm_spec) %>% 
+svm_wflow <-
+  workflow() %>%
+  add_model(svm_spec) %>%
   add_recipe(overassessed_second_recipe)
 
-perf_meas <- metric_set(roc_auc, mn_log_loss)
+perf_meas <- metric_set(roc_auc)
 
 # What sort of metrics are appropriate here? Is the ROC and the MN Log Loss appropriate starting points?
 
