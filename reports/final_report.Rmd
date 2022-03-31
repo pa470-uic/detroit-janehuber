@@ -684,13 +684,26 @@ your_search <-
     control = ctrl
   )
 
-show_best(your_search)
+#show_best(your_search)
+
+best_results <- 
+  your_search %>% 
+  select_best()
+
+model_fit <- 
+  svm_wflow %>% 
+  finalize_workflow(best_results) %>% 
+  fit_resamples(overassessed_samples, control=control_resamples(save_pred = TRUE))
  
+model_fit
+
 ```
 
-# Conclusion & Presentation (Part C)
+# Conclusion (Part C)
 
 Final thoughts here, comparing to all of these things.
+
+
 
 
 
