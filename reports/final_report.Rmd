@@ -642,6 +642,8 @@ best_results_fit %>%
    coord_obs_pred() + 
    labs(x = "observed", y = "predicted")
 
+#On my machine, I'm not seeing the graph displaying values for the models, but I'm not sure if it's a problem with my computer or with how I've done the work to evaluate.
+
 autoplot(
    grid_results,
    rank_metric = "rmse",  # <- how to order models
@@ -653,10 +655,11 @@ autoplot(
    theme(legend.position = "none")
 ```
 
-
-   
+The K-Nearest Neighbor model gave us the best predictions for Detroit property assessments.
    
 # Hyperparameter Exploration for Classification (Part B)
+   
+When exploring our classification model, we can tune the hyperparameters using an SVM model to see how well we are able to predict the likelihood of overassessment by the assessor. 
    
    
 ```{r overassessed-hyperparameter-exploration}
@@ -673,9 +676,9 @@ svm_wflow <-
   add_model(svm_spec) %>%
   add_recipe(overassessed_second_recipe)
 
-perf_meas <- metric_set(roc_auc, mn_log_loss)
+# Using the ROC and the MN Log Loss appropriate starting points?
 
-# What sort of metrics are appropriate here? Is the ROC and the MN Log Loss appropriate starting points?
+perf_meas <- metric_set(roc_auc, mn_log_loss)
 
 initial_vals <-
   svm_wflow %>%
@@ -697,7 +700,7 @@ your_search <-
     control = ctrl
   )
 
-#show_best(your_search)
+show_best(your_search)
 
 best_results <- 
   your_search %>% 
@@ -708,18 +711,15 @@ model_fit <-
   finalize_workflow(best_results) %>% 
   fit_resamples(overassessed_samples, control=control_resamples(save_pred = TRUE))
  
-model_fit
+#model_fit
+
+autoplot(your_search, type = "performance")
 
 ```
 
 # Conclusion (Part C)
 
-
-
-
-Paragraph 1:
-- Lots of injustice in Detroit
-- Deserves good model
+The consequences of poor assessments in Detroit has been significant and caused a great deal of harm to Detroit residents, exacerbating inequality and contributing to a high number of home foreclosures in the city. It is not a particularly transparent process and, while we may have suspicions of their methodology, the assessor has not publicly shared the details of their process.There are a number of problems that impact the ability of the assessor to create accurate assessments, in particular data quality and detail. Most assessors around the country struggle to create accurate assessments while respecting the privacy of homeowners and Detroit is no different. However, all these factors combined contribute to poor quality of assessments. Residents of Detroit deserve better--and fairer--from their elected officials.
 
 After exploring Detroit's data model, it's clear the
 
