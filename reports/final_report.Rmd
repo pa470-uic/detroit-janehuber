@@ -721,30 +721,7 @@ autoplot(your_search, type = "performance")
 
 The consequences of poor assessments in Detroit has been significant and caused a great deal of harm to Detroit residents, exacerbating inequality and contributing to a high number of home foreclosures in the city. It is not a particularly transparent process and, while we may have suspicions of their methodology, the assessor has not publicly shared the details of their process.There are a number of problems that impact the ability of the assessor to create accurate assessments, in particular data quality and detail. Most assessors around the country struggle to create accurate assessments while respecting the privacy of homeowners and Detroit is no different. However, all these factors combined contribute to poor quality of assessments. Residents of Detroit deserve better--and fairer--from their elected officials.
 
-After exploring Detroit's data model, it's clear the
 
-Paragraph 2:
-- Developed models of glm for classification and for predicting sale price.
-- Pretty poor models :/ 
+The models that I was able to generate face the same issues as the Detroit assessor's office in terms of quality and lack of details that may contribute to home value. I believe my model is quite effective at identifying whether or not something will be overassessed, but I do not believe that my sale price prediction model has an impressive RMSE. Further tuning the models and their hyperparameters helped me to identify more effective models.
 
-Paragraph 3:
-- When evaluating some further models, it looks like KNN was the best model that I was able to test; it produced better outcomes.
-- I do not think Detroit should use my models
-
-Paragraph 4: 
-- Right now, Detroit's models are extremely poor and are causing a lot of harm.
-- However, I think there are significant ethical concerns with the work I did that make it a bad idea for Detroit's assessor to adopt my model specifically.
-- First of all, I have low personal stakes in this project and am not a professional; we should have evidence-based reasons to support.
-- Secondly, the data is poor. While evaluating years where we know the answer, we know we are not very successful... We know harm is currently beging caused; what harm could be caused by training our data on a harmful housing market (capitalism!) and on racist patterns of valuing homes. We should exercise extreme caution in applying ML models based on this background.
-- Third, I think that the use of machine learning should be a decision made by people in elected office, since the results and implications of those decisions should, in a healthy democracy, be forced to... 
-
-
-
-
-
-
-
-
-
-
-
+Big picture, when evaluating whether Detroit should adopt this model, there are some ethical concerns that hold me back from suggesting they implement the model. Even if the model "performs better" than Detroit's assessments when compared with sale price (we would have to compare the Coefficient of Differential to determine that), I argue that extreme caution and hesitancy should be used when applying ML models to assessments. The lack of transparency that my models produce means that Detroit would replace one un-transparent tool with another, although perhaps with less accountability because "the algorithm" can be blamed more than an elected official. Additionally, poor data quality should make us hesitant to base future home assessments to squarely on patterns seen in the past. Since the harm caused by unfair assessments can be huge and lead to foreclosures, creating tools that could potentially reaffirm systemic bias should be evaluated extremely closely. Layering in a history of racism and ["redlinng"](https://www.canr.msu.edu/redlining/detroit), we should be hesitant to claim that qualities in historic sale values are an effective tool to give a fair assessment to homeowners. Furthermore, I believe that we should have significant concerns around applying a model that cart blanche seeks to generate assessments without factoring in equity may not effectively address overall concerns with assessments in Detroit. While this model may be a step in the right direction, I believe all these topics must be addressed and agreed upon by the public and elected officials before this experiment is conducted.
