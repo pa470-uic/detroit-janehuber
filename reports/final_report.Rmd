@@ -660,7 +660,7 @@ svm_wflow <-
   add_model(svm_spec) %>%
   add_recipe(overassessed_second_recipe)
 
-perf_meas <- metric_set(roc_auc)
+perf_meas <- metric_set(roc_auc, mn_log_loss)
 
 # What sort of metrics are appropriate here? Is the ROC and the MN Log Loss appropriate starting points?
 
@@ -674,15 +674,13 @@ initial_vals <-
 
 ctrl <- control_bayes(verbose = TRUE)
 
-
-
 your_search <-
   svm_wflow %>%
   tune_bayes(
     resamples = overassessed_samples,
     metrics = perf_meas,
     initial = initial_vals,
-    iter = 25,
+    iter = 2,
     control = ctrl
   )
 
