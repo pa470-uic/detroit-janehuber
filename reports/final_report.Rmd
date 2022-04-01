@@ -549,11 +549,11 @@ second_prediction_estimate <-
   second_prediction$.estimate[1]
 
 
-# all_predictions <- 
-#   tibble(first_RMSE = first_prediction_estimate,
-#          second_RMSE = second_prediction_estimate)
-#   
-# all_predictions
+all_predictions <-
+  tibble(first_RMSE = first_prediction_estimate,
+         second_RMSE = second_prediction_estimate)
+
+all_predictions
 ```
 
 # Comparison
@@ -642,7 +642,7 @@ best_results_fit %>%
    coord_obs_pred() + 
    labs(x = "observed", y = "predicted")
 
-#On my machine, I'm not seeing the graph displaying values for the models, but I'm not sure if it's a problem with my computer or with how I've done the work to evaluate.
+#On my machine, I'm not seeing the graph displaying values for the models, but I'm not sure if it's a problem with my computer or with how I've done the work to evaluate. I wasn't able to get it to knit with this autoplot, may need to do some more memory management work.
 
 autoplot(
    grid_results,
@@ -696,7 +696,7 @@ your_search <-
     resamples = overassessed_samples,
     metrics = perf_meas,
     initial = initial_vals,
-    iter = 10,
+    iter = 5,
     control = ctrl
   )
 
